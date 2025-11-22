@@ -29,13 +29,16 @@ const Analytics = () => {
         console.error(err);
       }
     };
-    fetchData();
+    if (userId) fetchData();
   }, [userId]);
 
   if (!data)
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500">
-        Loading Analytics...
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500 font-sans">
+        <div className="flex flex-col items-center gap-2">
+          <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+          <p>Loading Analytics...</p>
+        </div>
       </div>
     );
 
@@ -74,6 +77,10 @@ const Analytics = () => {
                   tick={{ fill: "#52525b", fontSize: 12 }}
                   tickLine={false}
                   axisLine={false}
+                  tickFormatter={(str) => {
+                    const d = new Date(str);
+                    return `${d.getDate()}/${d.getMonth() + 1}`;
+                  }}
                 />
                 <YAxis
                   tick={{ fill: "#52525b", fontSize: 12 }}
@@ -107,7 +114,11 @@ const Analytics = () => {
           </h3>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data.topProducts} layout="vertical">
+              <BarChart
+                data={data.topProducts}
+                layout="vertical"
+                margin={{ left: 20 }}
+              >
                 <XAxis type="number" hide />
                 <YAxis
                   dataKey="name"

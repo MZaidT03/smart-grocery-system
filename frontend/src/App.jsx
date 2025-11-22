@@ -10,7 +10,8 @@ import Register from "./components/RegisterPage";
 import Dashboard from "./components/Dashboard";
 import LandingPage from "./components/LandingPage";
 import Analytics from "./components/Analytics";
-import StarterList from "./components/StarterList";
+
+import ShoppingList from "./components/ShoppingList";
 
 // Simple Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -45,14 +46,7 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/starter"
-          element={
-            <ProtectedRoute>
-              <StarterList />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/shopping-list/:listId" element={<ShoppingList />} />
 
         {/* Default Redirect */}
         <Route path="*" element={<Navigate to="/" replace />} />
