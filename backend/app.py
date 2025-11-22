@@ -375,23 +375,31 @@ def confirm_list(list_id):
 
         items = c.execute("SELECT * FROM shopping_list_items WHERE list_id = ? AND is_deleted = 0", (list_id,)).fetchall()
         
+        count = 0
         for item in items:
             qty = safe_float(item['adjusted_quantity'])
             if qty <= 0: continue
             
+            # FIX: Convert Row to dict to use .get(), or just use item['category']
+            # We use dict(item) to be safe and allow .get() default
+            item_dict = dict(item)
+            category = item_dict.get('category', 'Other')
+
             c.execute("""
-                INSERT INTO products (user_id, item_name, consumption_unit, current_quantity, initial_quantity, category)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO products (user_id, item_name, consumption_unit, current_quantity, initial_quantity, category, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, 1)
                 ON CONFLICT(user_id, item_name, consumption_unit) DO UPDATE SET
                 current_quantity = current_quantity + excluded.current_quantity,
                 initial_quantity = initial_quantity + excluded.current_quantity,
+                category = excluded.category,
                 is_active = 1,
                 updated_at = CURRENT_TIMESTAMP
-            """, (user_id, item['item_name'], item['consumption_unit'], qty, qty, item.get('category', 'Other')))
+            """, (user_id, item['item_name'], item['consumption_unit'], qty, qty, category))
+            count += 1
         
         c.execute("UPDATE shopping_lists SET is_confirmed = 1, confirmed_at = CURRENT_TIMESTAMP WHERE list_id = ?", (list_id,))
         conn.commit()
-        return jsonify({"success": True})
+        return jsonify({"success": True, "message": f"Inventory updated with {count} items"})
     except Exception as e:
         conn.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
