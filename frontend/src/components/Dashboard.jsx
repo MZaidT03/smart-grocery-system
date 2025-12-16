@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ShoppingCart,
@@ -18,11 +18,15 @@ import {
   Users,
   RefreshCw,
   BarChart3,
+  Clock,
+  User,
 } from "lucide-react";
 
 const Dashboard = () => {
   // --- State ---
   const [products, setProducts] = useState([]);
+  const [catalog, setCatalog] = useState([]);
+  const [householdSize, setHouseholdSize] = useState(1);
 
   // Add Product State
   const [name, setName] = useState("");
@@ -30,13 +34,22 @@ const Dashboard = () => {
   const [category, setCategory] = useState("Staples");
   const [quantity, setQuantity] = useState("");
 
-  // Consume Modal State
+  // Suggestions State
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const wrapperRef = useRef(null);
+
+  // Consumption Frequency State
+  const [usageQty, setUsageQty] = useState(1);
+  const [usagePeriod, setUsagePeriod] = useState("7");
+
+  // Modal States
   const [showConsumeModal, setShowConsumeModal] = useState(false);
   const [consumeAmount, setConsumeAmount] = useState("");
   const [selectedProduct, setSelectedProduct] = useState(null);
-
-  // Generate List Modal State
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+
+  // Generate List State
   const [genMode, setGenMode] = useState("new");
   const [genMembers, setGenMembers] = useState(1);
   const [genDays, setGenDays] = useState(7);
@@ -69,10 +82,45 @@ const Dashboard = () => {
       navigate("/login");
     } else {
       fetchProducts();
+      fetchCatalog();
+      fetchUserProfile();
     }
+
+    function handleClickOutside(event) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [userId, navigate]);
 
   // --- Data Fetching ---
+  const fetchUserProfile = async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:5000/user/${userId}/profile`);
+      const data = await res.json();
+      if (data.success) {
+        setHouseholdSize(data.user.household_size || 1);
+        setGenMembers(data.user.household_size || 1);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const fetchCatalog = async () => {
+    try {
+      const res = await fetch(`http://127.0.0.1:5000/catalog`);
+      if (res.ok) {
+        const data = await res.json();
+        setCatalog(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const fetchProducts = async () => {
     if (!userId) return;
     try {
@@ -87,7 +135,36 @@ const Dashboard = () => {
     }
   };
 
-  // --- Actions ---
+  // --- Handlers ---
+
+  const handleNameChange = (e) => {
+    const val = e.target.value;
+    setName(val);
+    if (val.length > 0) {
+      const matches = catalog.filter((item) =>
+        item.item_name.toLowerCase().includes(val.toLowerCase())
+      );
+      setSuggestions(matches.slice(0, 5));
+      setShowSuggestions(true);
+    } else {
+      setShowSuggestions(false);
+    }
+  };
+
+  const selectSuggestion = (item) => {
+    setName(item.item_name);
+    setUnit(item.consumption_unit);
+    setCategory(item.category);
+
+    // Smart Calculation: Daily Rate * Household Size * 7 Days
+    const weeklyNeed = item.daily_consumption_per_person * householdSize * 7;
+    const roundedNeed = Math.max(0.5, Math.round(weeklyNeed * 2) / 2);
+
+    setUsageQty(roundedNeed);
+    setUsagePeriod("7");
+    setShowSuggestions(false);
+  };
+
   const handleAddProduct = async (e) => {
     e.preventDefault();
     if (!name || !quantity) return;
@@ -101,11 +178,15 @@ const Dashboard = () => {
           unit,
           category,
           quantity: parseFloat(quantity),
+          usageQty: parseFloat(usageQty),
+          usageDays: parseFloat(usagePeriod),
           userId,
         }),
       });
       setName("");
       setQuantity("");
+      setUsageQty(1);
+      setUsagePeriod("7");
       fetchProducts();
     } catch (error) {
       console.error("Add error:", error);
@@ -163,7 +244,6 @@ const Dashboard = () => {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-
       if (data.success) {
         setShowGenerateModal(false);
         navigate(`/shopping-list/${data.listId}`);
@@ -171,14 +251,42 @@ const Dashboard = () => {
         alert("Error: " + data.message);
       }
     } catch (error) {
-      console.error("Generation error:", error);
       alert("Failed to connect to server");
     } finally {
       setIsGenerating(false);
     }
   };
+  const handleConsumeWithRate = async (newRateQty, newRateDays) => {
+    if (!consumeAmount || consumeAmount <= 0) return;
 
-  // --- Helpers ---
+    try {
+      await fetch("http://127.0.0.1:5000/consume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: selectedProduct.id,
+          amount: parseFloat(consumeAmount),
+          userId,
+          // Pass the new rate settings
+          newRateQty: parseFloat(newRateQty),
+          newRateDays: parseFloat(newRateDays),
+        }),
+      });
+      setShowConsumeModal(false);
+      setConsumeAmount("");
+      // This will refetch products, so the Dashboard
+      // will immediately show the updated Per/Person and Per/Day stats!
+      fetchProducts();
+    } catch (error) {
+      console.error("Consume error:", error);
+    }
+  };
+
+  const calculateMonthlyNeed = (qty, period) => {
+    const daily = qty / period;
+    return (daily * 30).toFixed(1);
+  };
+
   const getRunOutDate = (daysLeft) => {
     if (!daysLeft || daysLeft >= 900) return "—";
     const date = new Date();
@@ -190,19 +298,19 @@ const Dashboard = () => {
     if (quantity === 0)
       return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-500 border border-red-500/20">
-          <AlertTriangle className="w-3 h-3 mr-1" /> Out of Stock
+          <AlertTriangle className="w-3 h-3 mr-1" /> Empty
         </span>
       );
     if (!daysLeft || daysLeft >= 900)
       return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">
-          <Activity className="w-3 h-3 mr-1" /> No Data
+          <Activity className="w-3 h-3 mr-1" /> N/A
         </span>
       );
     if (daysLeft < 3)
       return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-500 border border-red-500/20">
-          <TrendingDown className="w-3 h-3 mr-1" /> Critical
+          <TrendingDown className="w-3 h-3 mr-1" /> {Math.round(daysLeft)} Days
         </span>
       );
     if (daysLeft < 7)
@@ -213,7 +321,7 @@ const Dashboard = () => {
       );
     return (
       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-        <CheckCircle className="w-3 h-3 mr-1" /> Good
+        <CheckCircle className="w-3 h-3 mr-1" /> OK
       </span>
     );
   };
@@ -228,23 +336,27 @@ const Dashboard = () => {
               SmartGrocer
             </span>
           </div>
-
           <div className="flex items-center space-x-4">
-            {/* ANALYTICS BUTTON */}
             <button
               onClick={() => navigate("/analytics")}
               className="p-2 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-xl transition"
-              title="View Analytics"
             >
               <BarChart3 className="w-5 h-5" />
             </button>
-
-            <div className="hidden sm:flex items-center px-4 py-2 bg-zinc-900 rounded-xl border border-zinc-800">
-              <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-yellow-600 rounded-full flex items-center justify-center text-black font-bold">
+            <button
+              onClick={() => navigate("/profile")}
+              className="hidden sm:flex items-center px-4 py-2 bg-zinc-900 hover:bg-zinc-800 rounded-xl border border-zinc-800 transition group"
+            >
+              <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-yellow-600 rounded-full flex items-center justify-center text-black font-bold mr-3">
                 {user?.charAt(0).toUpperCase()}
               </div>
-            </div>
-
+              <div className="text-left">
+                <span className="block text-xs text-zinc-500">Welcome</span>
+                <span className="block text-sm font-bold text-white group-hover:text-amber-400">
+                  {user}
+                </span>
+              </div>
+            </button>
             <button
               onClick={() => {
                 localStorage.clear();
@@ -276,23 +388,46 @@ const Dashboard = () => {
           </button>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl mb-10 shadow-lg">
+        {/* --- ADD PRODUCT FORM --- */}
+        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl mb-10 shadow-lg relative z-0">
           <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
             <Plus className="w-5 h-5 text-amber-400" /> Quick Add Item
           </h2>
+
           <form
             onSubmit={handleAddProduct}
             className="grid md:grid-cols-12 gap-4"
           >
-            <div className="md:col-span-3 relative">
+            {/* ... (Keep existing form logic for adding products) ... */}
+            <div className="md:col-span-3 relative" ref={wrapperRef}>
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <input
                 type="text"
                 placeholder="Product Name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={handleNameChange}
+                onFocus={() => name && setShowSuggestions(true)}
                 className="w-full pl-10 pr-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:border-amber-500/50 outline-none transition"
+                autoComplete="off"
               />
+              {showSuggestions && suggestions.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+                  {suggestions.map((item, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => selectSuggestion(item)}
+                      className="px-4 py-3 hover:bg-zinc-800 cursor-pointer border-b border-zinc-800 last:border-0 flex justify-between items-center group"
+                    >
+                      <span className="text-sm font-medium text-white group-hover:text-amber-400">
+                        {item.item_name}
+                      </span>
+                      <span className="text-xs text-zinc-500 bg-zinc-950 px-2 py-1 rounded border border-zinc-800">
+                        {item.category}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="md:col-span-3">
               <select
@@ -307,13 +442,16 @@ const Dashboard = () => {
                 ))}
               </select>
             </div>
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-bold uppercase">
+                Qty
+              </span>
               <input
                 type="number"
-                placeholder="Qty"
+                placeholder="0"
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
-                className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:border-amber-500/50 outline-none transition"
+                className="w-full pl-10 pr-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:border-amber-500/50 outline-none transition"
               />
             </div>
             <div className="md:col-span-2">
@@ -332,87 +470,174 @@ const Dashboard = () => {
             <div className="md:col-span-2">
               <button
                 type="submit"
-                className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl transition border border-zinc-700"
+                className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl transition border border-zinc-700 h-full"
               >
                 Add Stock
               </button>
             </div>
+
+            <div className="md:col-span-12 grid md:grid-cols-12 gap-4 border-t border-zinc-800 pt-4 mt-2">
+              <div className="md:col-span-3 flex items-center">
+                <label className="text-xs font-bold text-amber-500 uppercase flex items-center gap-2">
+                  <Clock className="w-3 h-3" /> Consumption Rate:
+                </label>
+              </div>
+              <div className="md:col-span-2 relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">
+                  Use
+                </span>
+                <input
+                  type="number"
+                  value={usageQty}
+                  onChange={(e) => setUsageQty(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 outline-none focus:border-amber-500 text-sm"
+                />
+              </div>
+              <div className="md:col-span-3">
+                <select
+                  value={usagePeriod}
+                  onChange={(e) => setUsagePeriod(e.target.value)}
+                  className="w-full px-4 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 outline-none focus:border-amber-500 text-sm"
+                >
+                  <option value="1">Daily</option>
+                  <option value="7">Weekly (7 Days)</option>
+                  <option value="14">Bi-Weekly (14 Days)</option>
+                  <option value="30">Monthly (30 Days)</option>
+                  <option value="60">Every 2 Months</option>
+                </select>
+              </div>
+              <div className="md:col-span-4 flex items-center text-xs text-zinc-500 bg-zinc-950/30 px-3 rounded-lg border border-dashed border-zinc-800">
+                <span>
+                  ≈ You need approx{" "}
+                  <strong>
+                    {calculateMonthlyNeed(usageQty, usagePeriod)} {unit}
+                  </strong>{" "}
+                  per month.
+                </span>
+              </div>
+            </div>
           </form>
         </div>
 
+        {/* --- INVENTORY TABLE (UPDATED) --- */}
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead className="bg-zinc-950/50 text-xs uppercase text-zinc-500 font-medium">
                 <tr>
-                  <th className="px-6 py-4">Category</th>
                   <th className="px-6 py-4">Item Name</th>
                   <th className="px-6 py-4">In Stock</th>
-                  <th className="px-6 py-4">Daily Usage</th>
+                  <th className="px-6 py-4">Consumption Rate</th>
+                  <th className="px-6 py-4 text-amber-500">
+                    Daily / Person
+                  </th>{" "}
+                  {/* NEW COLUMN */}
                   <th className="px-6 py-4">Est. Run Out</th>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {products.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="hover:bg-zinc-800/30 transition group"
-                  >
-                    <td className="px-6 py-4 text-zinc-500 text-xs uppercase font-bold tracking-wider">
-                      {p.category || "General"}
-                    </td>
-                    <td className="px-6 py-4 font-medium text-white text-sm">
-                      {p.name}
-                    </td>
-                    <td className="px-6 py-4 text-zinc-300 font-mono">
-                      <span className="text-white font-bold">{p.quantity}</span>{" "}
-                      <span className="text-xs text-zinc-500">{p.unit}</span>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-400 text-sm font-mono">
-                      {p.effective_daily_rate > 0 ? (
-                        <div className="flex items-center gap-1">
-                          <BarChart3 className="w-3 h-3 text-amber-500" />
-                          {p.effective_daily_rate.toFixed(2)}{" "}
-                          <span className="text-xs text-zinc-600">/day</span>
+                {products.map((p) => {
+                  // --- CALCULATE PER PERSON RATE ---
+                  const dailyRate =
+                    p.usage_freq_days > 0
+                      ? p.usage_freq_qty / p.usage_freq_days
+                      : 0;
+                  const perPersonDaily =
+                    householdSize > 0 ? dailyRate / householdSize : 0;
+
+                  return (
+                    <tr
+                      key={p.id}
+                      className="hover:bg-zinc-800/30 transition group"
+                    >
+                      <td className="px-6 py-4">
+                        <div className="font-medium text-white text-sm">
+                          {p.name}
                         </div>
-                      ) : (
-                        <span className="text-zinc-600 text-xs italic">
-                          No history
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-zinc-300 text-sm">
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-3 h-3 text-zinc-500" />
-                          {getRunOutDate(p.days_left)}
+                        <div className="text-[10px] text-zinc-500 uppercase tracking-wider">
+                          {p.category}
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {renderStockStatus(p.days_left, p.quantity)}
-                    </td>
-                    <td className="px-6 py-4 text-right space-x-2">
-                      <button
-                        onClick={() => {
-                          setSelectedProduct(p);
-                          setShowConsumeModal(true);
-                        }}
-                        className="px-3 py-1.5 bg-zinc-800 text-amber-400 hover:text-amber-300 hover:bg-zinc-700 rounded-lg transition text-xs font-medium border border-amber-500/20 hover:border-amber-500/50 flex inline-flex items-center gap-1"
-                      >
-                        <Utensils className="w-3 h-3" /> Consume
-                      </button>
-                      <button
-                        onClick={() => handleDelete(p.id)}
-                        className="px-3 py-1.5 bg-zinc-800 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition text-xs border border-zinc-700 hover:border-red-500/20"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4 text-zinc-300 font-mono">
+                        <span className="text-white font-bold text-lg">
+                          {/* Show max 2 decimals */}
+                          {parseFloat(p.quantity).toLocaleString(undefined, {
+                            minimumFractionDigits: 0,
+                            maximumFractionDigits: 2,
+                          })}
+                        </span>{" "}
+                        <span className="text-xs text-zinc-500">{p.unit}</span>
+                      </td>
+
+                      {/* Original Rate */}
+                      <td className="px-6 py-4 text-zinc-400 text-sm font-mono">
+                        {p.usage_freq_days === 7 ? (
+                          <div className="flex items-center gap-2">
+                            <Clock className="w-3 h-3 text-zinc-600" />
+                            {p.usage_freq_qty} / week
+                          </div>
+                        ) : p.usage_freq_days === 30 ? (
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-3 h-3 text-zinc-600" />
+                            {p.usage_freq_qty} / month
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            {p.effective_daily_rate.toFixed(2)} / day
+                          </div>
+                        )}
+                      </td>
+
+                      {/* NEW: Per Person Column */}
+                      <td className="px-6 py-4 text-sm font-mono text-amber-500/80">
+                        <div className="flex items-center gap-1.5">
+                          <User className="w-3 h-3" />
+                          {perPersonDaily > 0
+                            ? perPersonDaily.toFixed(3)
+                            : "—"}{" "}
+                          {p.unit}
+                        </div>
+                      </td>
+
+                      <td className="px-6 py-4 text-zinc-300 text-sm">
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                p.days_left < 7
+                                  ? "bg-red-500"
+                                  : "bg-emerald-500"
+                              }`}
+                            ></span>
+                            {getRunOutDate(p.days_left)}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        {renderStockStatus(p.days_left, p.quantity)}
+                      </td>
+                      <td className="px-6 py-4 text-right space-x-2">
+                        <button
+                          onClick={() => {
+                            setSelectedProduct(p);
+                            setShowConsumeModal(true);
+                          }}
+                          className="px-3 py-1.5 bg-zinc-800 text-amber-400 hover:text-amber-300 hover:bg-zinc-700 rounded-lg transition text-xs font-medium border border-amber-500/20 hover:border-amber-500/50 inline-flex items-center gap-1"
+                        >
+                          <Utensils className="w-3 h-3" /> Consume
+                        </button>
+                        <button
+                          onClick={() => handleDelete(p.id)}
+                          className="px-3 py-1.5 bg-zinc-800 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition text-xs border border-zinc-700 hover:border-red-500/20"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {products.length === 0 && (
                   <tr>
                     <td
@@ -430,13 +655,14 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* --- MODAL: GENERATE LIST --- */}
       {showGenerateModal && (
+        // ... (Keep existing Generate List Modal) ...
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-4 animate-fade-in">
           <div className="bg-zinc-900 p-6 rounded-2xl w-full max-w-md border border-zinc-700 shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
               <ListPlus className="text-amber-400" /> Create Shopping List
             </h2>
-
             <div className="flex bg-zinc-950 p-1 rounded-xl mb-6">
               <button
                 onClick={() => setGenMode("new")}
@@ -459,7 +685,6 @@ const Dashboard = () => {
                 Restock Inventory
               </button>
             </div>
-
             <div className="space-y-4">
               <div>
                 <label className="block text-zinc-400 text-xs uppercase font-bold mb-2">
@@ -475,7 +700,6 @@ const Dashboard = () => {
                   />
                 </div>
               </div>
-
               {genMode === "new" && (
                 <>
                   <div>
@@ -508,7 +732,6 @@ const Dashboard = () => {
                   </div>
                 </>
               )}
-
               {genMode === "restock" && (
                 <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl flex gap-3">
                   <RefreshCw className="w-5 h-5 text-amber-500 flex-shrink-0" />
@@ -520,7 +743,6 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
-
             <div className="flex justify-end space-x-3 mt-8">
               <button
                 onClick={() => setShowGenerateModal(false)}
@@ -543,30 +765,106 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* --- MODAL: CONSUME (Existing) --- */}
-      {showConsumeModal && (
+      {/* --- UPDATED MODAL: CONSUME --- */}
+      {/* --- UPGRADED MODAL: CONSUME --- */}
+      {showConsumeModal && selectedProduct && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-4 animate-fade-in">
           <div className="bg-zinc-900 p-6 rounded-2xl w-full max-w-sm border border-zinc-700 shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-1">
               Log Consumption
             </h2>
-            <p className="text-zinc-400 mb-6 text-sm">
-              How much <strong>{selectedProduct?.name}</strong> did you use?
+            <p className="text-xs text-zinc-500 mb-4">
+              This will deduct stock and reset the auto-consumption timer.
             </p>
-            <div className="relative mb-6">
+
+            {/* 1. STOCK DISPLAY */}
+            <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 mb-4 flex justify-between items-center">
+              <span className="text-zinc-400 text-sm">Current Stock:</span>
+              <span className="text-white font-mono font-bold">
+                {selectedProduct.quantity} {selectedProduct.unit}
+              </span>
+            </div>
+
+            {/* 2. AMOUNT INPUT */}
+            <div className="relative mb-2">
               <input
                 type="number"
                 value={consumeAmount}
                 onChange={(e) => setConsumeAmount(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-700 px-4 py-3 rounded-xl text-white focus:border-amber-500 outline-none text-lg font-mono"
+                className="w-full bg-zinc-950 border border-zinc-700 px-4 py-3 rounded-xl text-white focus:border-amber-500 outline-none text-2xl font-mono text-center"
                 placeholder="0.00"
                 autoFocus
               />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-sm font-medium">
-                {selectedProduct?.unit}
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 text-sm font-medium">
+                {selectedProduct.unit}
               </span>
             </div>
-            <div className="flex justify-end space-x-3">
+
+            {/* QUICK ACTIONS */}
+            <div className="flex gap-2 mb-6">
+              <button
+                onClick={() => setConsumeAmount(selectedProduct.quantity)}
+                className="flex-1 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded border border-zinc-700 transition"
+              >
+                Used All
+              </button>
+              <button
+                onClick={() =>
+                  setConsumeAmount((selectedProduct.quantity / 2).toFixed(2))
+                }
+                className="flex-1 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded border border-zinc-700 transition"
+              >
+                Used 50%
+              </button>
+            </div>
+
+            {/* 3. NEW: UPDATE RATE SECTION */}
+            <div className="border-t border-zinc-800 pt-4 mb-4">
+              <div
+                className="flex items-center justify-between cursor-pointer group"
+                onClick={() => {
+                  // Toggle logic can be added here if you want to hide/show this section
+                  // For now, we assume it's always visible or controlled by a local state 'showRateEdit'
+                }}
+              >
+                <label className="text-xs font-bold text-amber-500 uppercase flex items-center gap-2">
+                  <Activity className="w-3 h-3" /> Update Usage Rate?
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="relative">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-600 text-[10px] font-bold">
+                    QTY
+                  </span>
+                  <input
+                    type="number"
+                    // We use a local state for this modal, initialize it with selectedProduct.usage_freq_qty
+                    defaultValue={selectedProduct.usage_freq_qty}
+                    id="modal_rate_qty"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2 pl-8 pr-2 text-sm text-white focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <select
+                    id="modal_rate_days"
+                    defaultValue={selectedProduct.usage_freq_days}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-2 text-sm text-white focus:border-amber-500"
+                  >
+                    <option value="1">Daily</option>
+                    <option value="7">Weekly</option>
+                    <option value="14">Bi-Weekly</option>
+                    <option value="30">Monthly</option>
+                  </select>
+                </div>
+              </div>
+              <p className="text-[10px] text-zinc-500 mt-2">
+                Update if you are consuming this faster/slower than expected.
+              </p>
+            </div>
+
+            {/* FOOTER ACTIONS */}
+            <div className="flex justify-end space-x-3 border-t border-zinc-800 pt-4">
               <button
                 onClick={() => setShowConsumeModal(false)}
                 className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-700 transition font-medium text-sm"
@@ -574,8 +872,21 @@ const Dashboard = () => {
                 Cancel
               </button>
               <button
-                onClick={handleConsume}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-xl font-bold transition text-sm"
+                onClick={() => {
+                  // Get values from the inputs directly
+                  const newRateQty =
+                    document.getElementById("modal_rate_qty").value;
+                  const newRateDays =
+                    document.getElementById("modal_rate_days").value;
+
+                  // Call existing handleConsume but with extra data
+                  handleConsumeWithRate(newRateQty, newRateDays);
+                }}
+                disabled={
+                  !consumeAmount ||
+                  parseFloat(consumeAmount) > selectedProduct.quantity
+                }
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-xl font-bold transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Confirm
               </button>

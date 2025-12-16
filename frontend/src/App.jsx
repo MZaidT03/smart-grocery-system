@@ -12,8 +12,8 @@ import LandingPage from "./components/LandingPage";
 import Analytics from "./components/Analytics";
 
 import ShoppingList from "./components/ShoppingList";
+import ProfilePage from "./components/ProfilePage";
 
-// Simple Protected Route Component
 const ProtectedRoute = ({ children }) => {
   const user = localStorage.getItem("user");
   if (!user) {
@@ -47,6 +47,14 @@ const App = () => {
           }
         />
         <Route path="/shopping-list/:listId" element={<ShoppingList />} />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Default Redirect */}
         <Route path="*" element={<Navigate to="/" replace />} />

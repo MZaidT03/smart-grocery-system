@@ -1,102 +1,135 @@
 import sqlite3
-import random
 from datetime import datetime, timedelta
+from database import get_db_connection
+from utils import hash_password
 
-DB_NAME = "grocery.db"
-
-def seed_data():
-    print(f"🔌 Connecting to database: {DB_NAME}...")
-    conn = sqlite3.connect(DB_NAME)
+def seed_database():
+    print("🌱 Seeding Database with Test Data...")
+    conn = get_db_connection()
     c = conn.cursor()
-    
-    # 1. Ensure User ID 1 exists
-    user_id = 1
-    user = c.execute("SELECT user_id FROM users WHERE user_id = ?", (user_id,)).fetchone()
-    
-    if not user:
-        print("👤 Creating Admin User...")
-        c.execute("INSERT OR IGNORE INTO users (user_id, username, password_hash, email) VALUES (?, ?, ?, ?)", 
-                  (1, "admin", "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8", "admin@example.com"))
-        conn.commit()
 
-    # ---------------------------------------------------------
-    # 2. Define Products to Seed
-    # Format: (Name, Unit, Category, Initial_Qty, Approx_Daily_Consumption)
-    # ---------------------------------------------------------
-    products_data = [
-        ("Milk (Tetra Pack)", "liters", "Dairy", 12.0, 0.8),
-        ("Wheat Flour (Atta)", "kg", "Staples", 20.0, 0.5),   # FIXED ORDER
-        ("Basmati Rice", "kg", "Staples", 10.0, 0.3),         # FIXED ORDER
-        ("Eggs", "dozen", "Dairy", 4.0, 0.2),
-        ("Cooking Oil", "liters", "Oil & Ghee", 5.0, 0.15),
-        ("Potatoes", "kg", "Vegetables", 5.0, 0.3),
-        ("Onions", "kg", "Vegetables", 4.0, 0.2),
-        ("Tomatoes", "kg", "Vegetables", 3.0, 0.25),
-        ("Chicken Breast", "kg", "Meat", 5.0, 0.6),
-        ("Tea Leaves", "kg", "Beverages", 1.0, 0.05),
-        ("Sugar", "kg", "Staples", 3.0, 0.1),
-        ("Red Chili Powder", "kg", "Spices", 0.5, 0.01),
-        ("Salt", "kg", "Spices", 1.0, 0.02),
-        ("Dish Soap", "liters", "Other", 2.0, 0.05),
-        ("Bread (Large)", "packet", "Bakery", 3.0, 0.3),
+    # ==========================================
+    # 1. CREATE TEST USER
+    # ==========================================
+    username = "testuser"
+    password = "password123"
+    email = "test@example.com"
+    
+    # Check if exists, else create
+    user = c.execute("SELECT user_id FROM users WHERE username=?", (username,)).fetchone()
+    if user:
+        user_id = user['user_id']
+        print(f"   ℹ️  User '{username}' already exists (ID: {user_id})")
+        
+        # CLEAR OLD DATA for this user to ensure a fresh test
+        print("   🧹 Cleaning old data for testuser...")
+        c.execute("DELETE FROM consumption_logs WHERE user_id=?", (user_id,))
+        c.execute("DELETE FROM consumption_summary WHERE user_id=?", (user_id,))
+        c.execute("DELETE FROM products WHERE user_id=?", (user_id,))
+    else:
+        print(f"   👤 Creating new user '{username}'...")
+        c.execute("INSERT INTO users (username, password_hash, email, household_size, diet_preference) VALUES (?, ?, ?, ?, ?)",
+                  (username, hash_password(password), email, 4, 'Non-Veg'))
+        user_id = c.lastrowid
+
+    # ==========================================
+    # 2. POPULATE CATALOG (Subset)
+    # ==========================================
+    catalog_items = [
+        ("Milk", 0.25, "liters", "Dairy", "Veg"),
+        ("Basmati Rice", 0.1, "kg", "Grains", "Vegan"),
+        ("Chicken Breast", 0.15, "kg", "Meat", "Non-Veg"),
+        ("Eggs", 1.0, "qty", "Dairy", "Non-Veg"), # 1 egg per person
+        ("Sugar", 0.05, "kg", "Pantry", "Vegan")
     ]
-
-    print("🧹 Cleaning old data for User 1...")
-    c.execute("DELETE FROM products WHERE user_id = ?", (user_id,))
-    c.execute("DELETE FROM consumption_logs WHERE user_id = ?", (user_id,))
-    c.execute("DELETE FROM consumption_summary WHERE user_id = ?", (user_id,))
-
-    print("📦 Seeding Products & Generating 30-Day History...")
     
-    count_products = 0
-    count_logs = 0
-
-    for name, unit, category, init_qty, daily_usage in products_data:
-        # --- A. Insert Product into 'products' table ---
-        # We set current_quantity slightly lower than initial to simulate usage
-        current_qty = max(0, init_qty - (daily_usage * 5)) 
-        
+    print("   📚 Seeding Catalog...")
+    for name, rate, unit, cat, diet in catalog_items:
         c.execute("""
-            INSERT INTO products (user_id, item_name, consumption_unit, current_quantity, initial_quantity, min_threshold, category, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-        """, (user_id, name, unit, current_qty, init_qty, 2.0, category))
+            INSERT INTO product_catalog (item_name, daily_consumption_per_person, consumption_unit, category, diet_type)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(item_name, consumption_unit) DO NOTHING
+        """, (name, rate, unit, cat, diet))
+
+    # ==========================================
+    # 3. INSERT PRODUCTS (Inventory)
+    # ==========================================
+    # We will simulate that we bought these 10 days ago.
+    print("   📦 Adding Products to Inventory...")
+    
+    products = [
+        # Name, Unit, Initial Qty, Category, Freq Qty, Freq Days
+        ("Milk", "liters", 20.0, "Dairy", 2.0, 1),      # High usage: 2L every 1 day
+        ("Basmati Rice", "kg", 10.0, "Grains", 0.5, 1), # Moderate usage: 0.5kg/day
+        ("Chicken Breast", "kg", 5.0, "Meat", 1.0, 3),  # Occasional: 1kg every 3 days
+        ("Eggs", "qty", 30.0, "Dairy", 4.0, 1),         # Consistent: 4 eggs/day
+    ]
+    
+    product_ids = {}
+
+    for name, unit, init_qty, cat, f_qty, f_days in products:
+        c.execute("""
+            INSERT INTO products (user_id, item_name, consumption_unit, current_quantity, initial_quantity, category, usage_freq_qty, usage_freq_days, last_auto_check)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (user_id, name, unit, init_qty, init_qty, cat, f_qty, f_days, datetime.now() - timedelta(days=10)))
+        product_ids[name] = c.lastrowid
+
+    # ==========================================
+    # 4. SIMULATE CONSUMPTION HISTORY (Last 10 Days)
+    # ==========================================
+    print("   📉 Simulating Consumption Logs & Analytics...")
+    
+    today = datetime.now()
+
+    # SCENARIO A: MILK (Consistent Usage - Same every day)
+    # Consumed 2 Liters every day for the last 10 days
+    p_id = product_ids["Milk"]
+    for i in range(10):
+        day_date = today - timedelta(days=10-i)
+        qty = 2.0
         
-        product_id = c.lastrowid
-        count_products += 1
+        # Log
+        c.execute("INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) VALUES (?, ?, ?, ?)",
+                  (p_id, user_id, qty, day_date.date()))
+        # Summary
+        c.execute("INSERT INTO consumption_summary (product_id, user_id, summary_date, total_consumed) VALUES (?, ?, ?, ?)",
+                  (p_id, user_id, day_date.date(), qty))
+        # Update Stock
+        c.execute("UPDATE products SET current_quantity = current_quantity - ? WHERE product_id=?", (qty, p_id))
 
-        # --- B. Generate 30 Days of Consumption History ---
-        today = datetime.now()
+    # SCENARIO B: CHICKEN (Variable Usage - Spikes on specific days)
+    # Cooked 1.5kg on Day 1, Day 4, and Day 8 only.
+    p_id = product_ids["Chicken Breast"]
+    cooking_days = [1, 4, 8] # Days ago
+    
+    for days_ago in cooking_days:
+        day_date = today - timedelta(days=days_ago)
+        qty = 1.5
         
-        for i in range(30):
-            day_date = today - timedelta(days=(30 - i))
-            date_str = day_date.strftime("%Y-%m-%d")
+        c.execute("INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) VALUES (?, ?, ?, ?)",
+                  (p_id, user_id, qty, day_date.date()))
+        c.execute("INSERT INTO consumption_summary (product_id, user_id, summary_date, total_consumed) VALUES (?, ?, ?, ?)",
+                  (p_id, user_id, day_date.date(), qty))
+        c.execute("UPDATE products SET current_quantity = current_quantity - ? WHERE product_id=?", (qty, p_id))
 
-            # Add randomness to daily usage (+/- 40%)
-            variance = random.uniform(0.6, 1.4)
-            consumed_amount = round(daily_usage * variance, 2)
-
-            # Randomly skip some days (people don't use everything every day)
-            if random.random() > 0.2: 
-                c.execute("""
-                    INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date)
-                    VALUES (?, ?, ?, ?)
-                """, (product_id, user_id, consumed_amount, date_str))
-
-                c.execute("""
-                    INSERT INTO consumption_summary (product_id, user_id, summary_date, total_consumed, avg_consumption_rate, days_in_period)
-                    VALUES (?, ?, ?, ?, ?, 1)
-                """, (product_id, user_id, date_str, consumed_amount, consumed_amount))
-                
-                count_logs += 1
+    # SCENARIO C: EGGS (Changing Usage - Weekend Breakfast)
+    # 2 eggs on weekdays, 6 eggs on weekends
+    p_id = product_ids["Eggs"]
+    for i in range(10):
+        day_date = today - timedelta(days=10-i)
+        is_weekend = day_date.weekday() >= 5 # 5=Sat, 6=Sun
+        qty = 6.0 if is_weekend else 2.0
+        
+        c.execute("INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) VALUES (?, ?, ?, ?)",
+                  (p_id, user_id, qty, day_date.date()))
+        c.execute("INSERT INTO consumption_summary (product_id, user_id, summary_date, total_consumed) VALUES (?, ?, ?, ?)",
+                  (p_id, user_id, day_date.date(), qty))
+        c.execute("UPDATE products SET current_quantity = current_quantity - ? WHERE product_id=?", (qty, p_id))
 
     conn.commit()
     conn.close()
-    print("------------------------------------------------")
-    print(f"✅ Success!")
-    print(f"   - Products Created: {count_products}")
-    print(f"   - Consumption Logs Generated: {count_logs}")
-    print("------------------------------------------------")
-    print("📊 Dashboard is now ready with analytics data.")
+    print("✅ Database Seeded Successfully!")
+    print(f"👉 Login with: {username} / {password}")
 
 if __name__ == "__main__":
-    seed_data()
+    seed_database()

@@ -9,6 +9,8 @@ import {
   Loader2,
   ShoppingBag,
   AlertCircle,
+  Calculator,
+  Clock, // <--- ADDED THIS IMPORT
 } from "lucide-react";
 
 const ShoppingList = () => {
@@ -35,7 +37,6 @@ const ShoppingList = () => {
       const data = await res.json();
       if (data.list) {
         setListMeta(data.list);
-        // The unified backend returns 'final_quantity' alias, but also 'adjusted_quantity'
         setItems(data.items);
       } else {
         alert("List not found");
@@ -58,7 +59,7 @@ const ShoppingList = () => {
       )
     );
 
-    // 2. API Call (using plural 'items' to match app.py)
+    // 2. API Call
     try {
       await fetch(`http://127.0.0.1:5000/shopping-list/items/${itemId}`, {
         method: "PUT",
@@ -71,7 +72,6 @@ const ShoppingList = () => {
   };
 
   const handleDeleteItem = async (itemId) => {
-    // Optimistic UI
     setItems((prev) => prev.filter((i) => i.item_id !== itemId));
 
     try {
@@ -102,10 +102,12 @@ const ShoppingList = () => {
         }
       );
 
+      const data = await res.json();
+
       if (res.ok) {
         setNewItemName("");
         setNewItemQty(1);
-        fetchListDetails(); // Reload to get new ID and formatting
+        fetchListDetails();
       }
     } catch (error) {
       console.error("Add failed", error);
@@ -213,58 +215,84 @@ const ShoppingList = () => {
 
         {/* ITEMS LIST */}
         <div className="space-y-3">
-          {items.map((item) => (
-            <div
-              key={item.item_id}
-              className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex items-center justify-between group hover:border-zinc-700 transition"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-zinc-200">{item.item_name}</h3>
-                  {item.category !== "Custom" && (
-                    <span className="text-[10px] bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded border border-zinc-700 uppercase tracking-wider">
-                      {item.category}
-                    </span>
+          {items.map((item) => {
+            // Calculate Logic
+            const perPerson = item.daily_consumption_per_person || 0;
+            const totalCalc =
+              perPerson * listMeta.num_members * listMeta.num_days;
+
+            return (
+              <div
+                key={item.item_id}
+                className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex items-center justify-between group hover:border-zinc-700 transition"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-zinc-200">
+                      {item.item_name}
+                    </h3>
+                    {item.category !== "Custom" && (
+                      <span className="text-[10px] bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded border border-zinc-700 uppercase tracking-wider">
+                        {item.category}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* --- VISUAL FEEDBACK FOR CONSUMPTION RATE --- */}
+                  {perPerson > 0 ? (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-amber-500/90 bg-amber-500/5 w-fit px-2 py-1 rounded border border-amber-500/10">
+                      <Clock className="w-3 h-3" />
+                      <span>
+                        {perPerson} {item.unit}/person × {listMeta.num_members}{" "}
+                        ppl × {listMeta.num_days} days ≈{" "}
+                        <strong>
+                          {totalCalc.toFixed(2)} {item.unit}
+                        </strong>
+                      </span>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-600 mt-1 italic">
+                      Manual item (default 1.0)
+                    </p>
+                  )}
+
+                  {item.current_stock > 0 && (
+                    <p className="text-xs text-emerald-500/80 mt-1 flex items-center gap-1">
+                      <Check className="w-3 h-3" /> You have{" "}
+                      {item.current_stock} {item.unit} at home
+                    </p>
                   )}
                 </div>
-                {item.current_stock > 0 && (
-                  <p className="text-xs text-emerald-500/80 mt-1 flex items-center gap-1">
-                    <Check className="w-3 h-3" /> You have {item.current_stock}{" "}
-                    {item.consumption_unit} at home
-                  </p>
-                )}
-              </div>
 
-              <div className="flex items-center gap-4">
-                {/* Quantity Editor */}
-                <div className="flex items-center bg-zinc-950 rounded-lg border border-zinc-800">
-                  <input
-                    type="number"
-                    value={item.adjusted_quantity}
-                    onChange={(e) =>
-                      handleUpdateItem(
-                        item.item_id,
-                        "adjustedQuantity",
-                        e.target.value
-                      )
-                    }
-                    className="w-16 bg-transparent py-2 text-center text-amber-400 font-bold outline-none"
-                  />
-                  <span className="pr-3 text-xs text-zinc-600 font-medium select-none">
-                    {item.consumption_unit}
-                  </span>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center bg-zinc-950 rounded-lg border border-zinc-800">
+                    <input
+                      type="number"
+                      value={item.adjusted_quantity}
+                      onChange={(e) =>
+                        handleUpdateItem(
+                          item.item_id,
+                          "adjustedQuantity",
+                          e.target.value
+                        )
+                      }
+                      className="w-16 bg-transparent py-2 text-center text-amber-400 font-bold outline-none"
+                    />
+                    <span className="pr-3 text-xs text-zinc-600 font-medium select-none">
+                      {item.unit}
+                    </span>
+                  </div>
+
+                  <button
+                    onClick={() => handleDeleteItem(item.item_id)}
+                    className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-
-                {/* Delete */}
-                <button
-                  onClick={() => handleDeleteItem(item.item_id)}
-                  className="p-2 text-zinc-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {items.length === 0 && (
             <div className="text-center py-12 text-zinc-500 bg-zinc-900/50 rounded-xl border border-dashed border-zinc-800">
@@ -275,7 +303,7 @@ const ShoppingList = () => {
         </div>
       </div>
 
-      {/* FOOTER ACTIONS */}
+      {/* FOOTER */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-zinc-950/90 backdrop-blur border-t border-zinc-900 flex justify-center">
         <div className="w-full max-w-4xl flex gap-3">
           <button

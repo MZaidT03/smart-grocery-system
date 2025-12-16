@@ -2,7 +2,7 @@ import sqlite3
 
 DB_NAME = "grocery.db"
 
-# Your specific dataset
+# ------------------ Main Food Dataset ------------------
 dataset = [
     (1001, "Wheat Flour (Atta)", 0.5, "Staples", "Vegan"),
     (1002, "Super Basmati Rice", 0.4, "Staples", "Vegan"),
@@ -86,6 +86,74 @@ dataset = [
     (1080, "Pickles (Achar)", 0.02, "Condiments", "Vegan")
 ]
 
+# ------------------ Additional Household & Personal Care ------------------
+additional_items = [
+    (2001, "Bath Soap", 0.02, "Personal Care", "Non-Food"),
+    (2002, "Shampoo", 0.015, "Personal Care", "Non-Food"),
+    (2003, "Conditioner", 0.01, "Personal Care", "Non-Food"),
+    (2004, "Toothpaste", 0.01, "Personal Care", "Non-Food"),
+    (2005, "Toothbrush", 0.002, "Personal Care", "Non-Food"),
+    (2006, "Shaving Razor", 0.001, "Personal Care", "Non-Food"),
+    (2007, "Shaving Foam", 0.005, "Personal Care", "Non-Food"),
+    (2008, "Body Lotion", 0.01, "Personal Care", "Non-Food"),
+    (2009, "Face Wash", 0.008, "Personal Care", "Non-Food"),
+    (2010, "Hand Wash", 0.01, "Personal Care", "Non-Food"),
+
+    (2011, "Laundry Detergent Powder", 0.05, "Cleaning", "Non-Food"),
+    (2012, "Laundry Liquid Detergent", 0.03, "Cleaning", "Non-Food"),
+    (2013, "Dishwashing Liquid", 0.02, "Cleaning", "Non-Food"),
+    (2014, "Dishwashing Bar", 0.015, "Cleaning", "Non-Food"),
+    (2015, "Toilet Cleaner", 0.01, "Cleaning", "Non-Food"),
+    (2016, "Floor Surface Cleaner (Phenyl)", 0.02, "Cleaning", "Non-Food"),
+    (2017, "Glass Cleaner", 0.01, "Cleaning", "Non-Food"),
+    (2018, "Fabric Softener", 0.01, "Cleaning", "Non-Food"),
+    (2019, "Bleach", 0.01, "Cleaning", "Non-Food"),
+
+    (2020, "Tissues (Box)", 0.05, "Household", "Non-Food"),
+    (2021, "Toilet Paper Roll", 0.03, "Household", "Non-Food"),
+    (2022, "Garbage Bags", 0.01, "Household", "Non-Food"),
+    (2023, "Aluminum Foil", 0.005, "Household", "Non-Food"),
+    (2024, "Plastic Wrap", 0.005, "Household", "Non-Food"),
+    (2025, "Matchbox", 0.002, "Household", "Non-Food"),
+    (2026, "Lighter", 0.001, "Household", "Non-Food"),
+    (2027, "Mosquito Repellent (Liquid)", 0.01, "Household", "Non-Food"),
+    (2028, "Mosquito Coils", 0.02, "Household", "Non-Food"),
+    (2029, "Air Freshener", 0.005, "Household", "Non-Food"),
+]
+
+# Combine all datasets
+catalog_items = dataset + additional_items
+
+
+# ------------------ Updated Seeding Function ------------------
+def infer_unit(name: str) -> str:
+    """Auto-detect unit based on item name."""
+    lower = name.lower()
+
+    # Liquids
+    if any(x in lower for x in ["milk", "oil", "juice", "drink", "detergent", "cleaner", "wash", "liquid"]):
+        return "liters"
+
+    # Pieces / countable items
+    if any(x in lower for x in ["egg", "banana", "paratha", "chapati", "toothbrush", "razor", "coil"]):
+        return "pieces"
+
+    # Packets
+    if any(x in lower for x in ["bread", "rusks", "biscuits", "cookies", "soap", "tissues", "foil", "wrap", "packet"]):
+        return "packet"
+
+    # Rolls
+    if "roll" in lower:
+        return "roll"
+
+    # Boxes
+    if "box" in lower:
+        return "box"
+
+    # Default
+    return "kg"
+
+
 def seed_catalog():
     print(f"🔌 Connecting to database: {DB_NAME}...")
     conn = sqlite3.connect(DB_NAME)
@@ -94,32 +162,23 @@ def seed_catalog():
     print("🧹 Clearing existing catalog to prevent duplicates...")
     c.execute("DELETE FROM product_catalog")
 
-    print(f"📦 Seeding {len(dataset)} items into Product Catalog...")
-    
+    print(f"📦 Seeding {len(catalog_items)} items into Product Catalog...")
+
     count = 0
-    for _, name, consumption, category, diet in dataset:
-        # Infer Unit logic (since csv didn't have it)
-        unit = "kg"
-        lower_name = name.lower()
-        
-        if "milk" in lower_name or "oil" in lower_name or "juice" in lower_name or "drink" in lower_name:
-            unit = "liters"
-        elif "eggs" in lower_name or "banana" in lower_name:
-            unit = "dozen"
-        elif "bread" in lower_name or "rusks" in lower_name or "packet" in lower_name or "biscuits" in lower_name:
-            unit = "packet"
-        elif "paratha" in lower_name or "chapati" in lower_name:
-            unit = "pieces"
-            
+    for _, name, consumption, category, diet_type in catalog_items:
+        unit = infer_unit(name)
+
         c.execute("""
-            INSERT INTO product_catalog (item_name, daily_consumption_per_person, consumption_unit, category, diet_type)
+            INSERT INTO product_catalog 
+            (item_name, daily_consumption_per_person, consumption_unit, category, diet_type)
             VALUES (?, ?, ?, ?, ?)
-        """, (name, consumption, unit, category, diet))
+        """, (name, consumption, unit, category, diet_type))
         count += 1
 
     conn.commit()
     conn.close()
     print(f"✅ Success! Seeded {count} catalog items.")
+
 
 if __name__ == "__main__":
     seed_catalog()
