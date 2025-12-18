@@ -1,149 +1,181 @@
 import React, { useEffect, useState } from "react";
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
+  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  AreaChart,
-  Area,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  Legend,
 } from "recharts";
-import { TrendingUp, ArrowLeft } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import {
+  TrendingUp,
+  PieChart as PieIcon,
+  DollarSign,
+  ArrowUpRight,
+} from "lucide-react";
+import Navbar from "./dashboard/NavBar";
+
+const COLORS = [
+  "#F59E0B",
+  "#10B981",
+  "#3B82F6",
+  "#EF4444",
+  "#8B5CF6",
+  "#EC4899",
+];
 
 const Analytics = () => {
   const [data, setData] = useState(null);
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
   const userId = localStorage.getItem("userId");
+  const user = localStorage.getItem("user");
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const res = await fetch(
-          `http://127.0.0.1:5000/analytics/${userId}?days=30`
+          `http://127.0.0.1:5000/analytics/dashboard?userId=${userId}`
         );
         const json = await res.json();
-        setData(json);
-      } catch (err) {
-        console.error(err);
+        if (json.success) setData(json);
+      } catch (error) {
+        console.error("Error fetching analytics:", error);
+      } finally {
+        setLoading(false);
       }
     };
-    if (userId) fetchData();
+    fetchData();
   }, [userId]);
 
-  if (!data)
+  if (loading)
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500 font-sans">
-        <div className="flex flex-col items-center gap-2">
-          <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
-          <p>Loading Analytics...</p>
-        </div>
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500">
+        Loading Analytics...
       </div>
     );
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-6 font-sans">
-      {/* Header */}
-      <div className="max-w-6xl mx-auto mb-8">
-        <button
-          onClick={() => navigate("/dashboard")}
-          className="flex items-center text-zinc-400 hover:text-white mb-4 transition"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" /> Back to Dashboard
-        </button>
-        <h1 className="text-3xl font-bold flex items-center gap-3">
-          <TrendingUp className="text-amber-400" /> Consumption Analytics
-        </h1>
-      </div>
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-20">
+      <Navbar user={user} />
 
-      <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-6">
-        {/* CHART 1: Daily Consumption Trend */}
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-lg">
-          <h3 className="text-lg font-bold text-zinc-200 mb-6">
-            30-Day Usage Trend
-          </h3>
+      <div className="max-w-7xl mx-auto px-6 py-10">
+        <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-2">
+          <TrendingUp className="text-amber-500" /> Analytics Dashboard
+        </h1>
+
+        {/* 1. SPENDING TRENDS */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl mb-8">
+          <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+            <DollarSign className="w-5 h-5 text-emerald-400" /> Estimated
+            Monthly Spending (PKR)
+          </h2>
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data.trend}>
-                <defs>
-                  <linearGradient id="colorUsage" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: "#52525b", fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(str) => {
-                    const d = new Date(str);
-                    return `${d.getDate()}/${d.getMonth() + 1}`;
-                  }}
-                />
-                <YAxis
-                  tick={{ fill: "#52525b", fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={false}
-                />
+              <LineChart data={data?.spending}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                <XAxis dataKey="month_str" stroke="#71717a" fontSize={12} />
+                <YAxis stroke="#71717a" fontSize={12} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: "#18181b",
                     border: "1px solid #27272a",
-                    borderRadius: "8px",
                   }}
-                  itemStyle={{ color: "#fbbf24" }}
+                  itemStyle={{ color: "#fff" }}
                 />
-                <Area
+                <Line
                   type="monotone"
-                  dataKey="total_consumption"
-                  stroke="#f59e0b"
-                  fillOpacity={1}
-                  fill="url(#colorUsage)"
+                  dataKey="total_spent"
+                  stroke="#F59E0B"
+                  strokeWidth={3}
+                  dot={{ r: 4 }}
                 />
-              </AreaChart>
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* CHART 2: Top Products */}
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl shadow-lg">
-          <h3 className="text-lg font-bold text-zinc-200 mb-6">
-            Most Consumed Items
-          </h3>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={data.topProducts}
-                layout="vertical"
-                margin={{ left: 20 }}
-              >
-                <XAxis type="number" hide />
-                <YAxis
-                  dataKey="name"
-                  type="category"
-                  width={100}
-                  tick={{ fill: "#a1a1aa", fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip
-                  cursor={{ fill: "#27272a" }}
-                  contentStyle={{
-                    backgroundColor: "#18181b",
-                    border: "1px solid #27272a",
-                    borderRadius: "8px",
-                  }}
-                />
-                <Bar
-                  dataKey="total"
-                  fill="#fbbf24"
-                  radius={[0, 4, 4, 0]}
-                  barSize={20}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+        <div className="grid md:grid-cols-2 gap-8">
+          {/* 2. INVENTORY COMPOSITION (Pie) */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+              <PieIcon className="w-5 h-5 text-blue-400" /> Inventory Breakdown
+            </h2>
+            <div className="h-64 w-full flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={data?.categories}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="count"
+                    nameKey="category" // <--- ADD THIS LINE
+                  >
+                    {data?.categories.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={COLORS[index % COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#18181b",
+                      border: "1px solid #27272a",
+                      borderRadius: "8px",
+                    }}
+                    itemStyle={{ color: "#fff" }}
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* 3. INFLATION TRACKER (List/Bar) */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+              <ArrowUpRight className="w-5 h-5 text-red-400" /> Inflation
+              Tracker (Top Increases)
+            </h2>
+            <div className="space-y-4">
+              {data?.inflation.length > 0 ? (
+                data.inflation.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between p-3 bg-zinc-950 rounded-xl border border-zinc-800"
+                  >
+                    <div>
+                      <div className="font-bold text-zinc-200">{item.name}</div>
+                      <div className="text-xs text-zinc-500">
+                        6 Months Ago: Rs {item.old_price}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-white">
+                        Rs {item.new_price}
+                      </div>
+                      <div className="text-xs font-bold text-red-400">
+                        +{item.change}%
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-zinc-500 text-sm text-center py-8">
+                  Not enough data history yet.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </div>
