@@ -7,12 +7,13 @@ import {
 } from "react-router-dom";
 import Login from "./components/LoginPage";
 import Register from "./components/RegisterPage";
-import Dashboard from "./components/Dashboard";
 import LandingPage from "./components/LandingPage";
 import Analytics from "./components/Analytics";
 
 import ShoppingList from "./components/ShoppingList";
 import ProfilePage from "./components/ProfilePage";
+import Dashboard from "./pages/Dashboard";
+import RecipesPage from "./pages/RecipesPage";
 
 const ProtectedRoute = ({ children }) => {
   const user = localStorage.getItem("user");
@@ -38,6 +39,7 @@ const App = () => {
             </ProtectedRoute>
           }
         />
+        <Route path="/recipes" element={<RecipesPage />} />
         <Route
           path="/analytics"
           element={

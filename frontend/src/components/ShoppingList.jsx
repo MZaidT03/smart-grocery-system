@@ -9,8 +9,8 @@ import {
   Loader2,
   ShoppingBag,
   AlertCircle,
-  Calculator,
-  Clock, // <--- ADDED THIS IMPORT
+  Clock,
+  Filter, // Added Filter Icon
 } from "lucide-react";
 
 const ShoppingList = () => {
@@ -21,6 +21,9 @@ const ShoppingList = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
+
+  // New Filter State
+  const [showInStockOnly, setShowInStockOnly] = useState(false);
 
   // Manual Add State
   const [newItemName, setNewItemName] = useState("");
@@ -102,8 +105,6 @@ const ShoppingList = () => {
         }
       );
 
-      const data = await res.json();
-
       if (res.ok) {
         setNewItemName("");
         setNewItemQty(1);
@@ -143,6 +144,14 @@ const ShoppingList = () => {
       </div>
     );
   }
+
+  // Helper to get filtered items
+  const filteredItems = items.filter((item) => {
+    if (showInStockOnly) {
+      return item.current_stock > 0;
+    }
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-24">
@@ -213,9 +222,33 @@ const ShoppingList = () => {
           </button>
         </form>
 
+        {/* --- NEW FILTER TOGGLE SECTION --- */}
+        <div className="flex items-center justify-between mb-4 px-1">
+          <h2 className="text-zinc-400 text-sm font-medium uppercase tracking-wider flex items-center gap-2">
+            Grocery Items
+            <span className="bg-zinc-800 text-zinc-500 text-xs py-0.5 px-2 rounded-full">
+              {filteredItems.length}
+            </span>
+          </h2>
+
+          <button
+            onClick={() => setShowInStockOnly(!showInStockOnly)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm border transition-all ${
+              showInStockOnly
+                ? "bg-amber-500/10 border-amber-500/50 text-amber-500"
+                : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700"
+            }`}
+          >
+            <Filter className="w-4 h-4" />
+            {showInStockOnly
+              ? "Showing In-Stock Only"
+              : "Filter Inventory Items"}
+          </button>
+        </div>
+
         {/* ITEMS LIST */}
         <div className="space-y-3">
-          {items.map((item) => {
+          {filteredItems.map((item) => {
             // Calculate Logic
             const perPerson = item.daily_consumption_per_person || 0;
             const totalCalc =
@@ -294,10 +327,22 @@ const ShoppingList = () => {
             );
           })}
 
-          {items.length === 0 && (
+          {filteredItems.length === 0 && (
             <div className="text-center py-12 text-zinc-500 bg-zinc-900/50 rounded-xl border border-dashed border-zinc-800">
               <AlertCircle className="w-10 h-10 mx-auto mb-3 opacity-20" />
-              <p>Your list is empty.</p>
+              <p>
+                {showInStockOnly
+                  ? "No items in this list match your current inventory."
+                  : "Your list is empty."}
+              </p>
+              {showInStockOnly && (
+                <button
+                  onClick={() => setShowInStockOnly(false)}
+                  className="mt-2 text-amber-500 text-sm hover:underline"
+                >
+                  Show all items
+                </button>
+              )}
             </div>
           )}
         </div>
