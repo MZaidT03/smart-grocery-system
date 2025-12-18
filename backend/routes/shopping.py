@@ -164,9 +164,24 @@ def confirm_list(list_id):
             qty = safe_float(item['adjusted_quantity'])
             if qty <= 0: continue
             
-            cat_entry = conn.execute("SELECT daily_consumption_per_person FROM product_catalog WHERE item_name = ? COLLATE NOCASE", (item['item_name'],)).fetchone()
-            usage_qty = safe_float(cat_entry['daily_consumption_per_person']) * list_info['num_members'] if cat_entry else 1.0
-            usage_days = 1
+            # --- UPDATED QUERY: Fetch frequency columns too ---
+            cat_entry = conn.execute("""
+                SELECT daily_consumption_per_person, default_freq_qty, default_freq_days 
+                FROM product_catalog 
+                WHERE item_name = ? COLLATE NOCASE
+            """, (item['item_name'],)).fetchone()
+            
+            # --- LOGIC FIX: Use the catalog frequency if available ---
+            if cat_entry:
+                # Use stored frequency (e.g., 1 pack, 7 days)
+                usage_qty = safe_float(cat_entry['default_freq_qty']) * list_info['num_members']
+                usage_days = safe_float(cat_entry['default_freq_days'])
+            else:
+                # Fallback for custom items
+                usage_qty = 1.0
+                usage_days = 1.0
+
+            category_val = dict(item).get('category', 'Other')
 
             conn.execute("""
                 INSERT INTO products (user_id, item_name, consumption_unit, current_quantity, initial_quantity, category, usage_freq_qty, usage_freq_days, is_active)
@@ -174,9 +189,10 @@ def confirm_list(list_id):
                 ON CONFLICT(user_id, item_name, consumption_unit) DO UPDATE SET
                     current_quantity = current_quantity + excluded.current_quantity,
                     initial_quantity = initial_quantity + excluded.current_quantity,
-                    usage_freq_qty = excluded.usage_freq_qty, usage_freq_days = excluded.usage_freq_days,
+                    usage_freq_qty = excluded.usage_freq_qty, 
+                    usage_freq_days = excluded.usage_freq_days, -- This now updates correctly!
                     category = excluded.category, is_active = 1, updated_at = CURRENT_TIMESTAMP
-            """, (list_info['user_id'], item['item_name'], item['consumption_unit'], qty, qty, item.get('category', 'Other'), usage_qty, usage_days))
+            """, (list_info['user_id'], item['item_name'], item['consumption_unit'], qty, qty, category_val, usage_qty, usage_days))
             count += 1
         
         conn.execute("UPDATE shopping_lists SET is_confirmed = 1, confirmed_at = CURRENT_TIMESTAMP WHERE list_id = ?", (list_id,))
@@ -184,6 +200,7 @@ def confirm_list(list_id):
         return jsonify({"success": True, "message": f"Inventory updated with {count} items"})
     except Exception as e:
         conn.rollback()
+        print("Error:", e)
         return jsonify({"success": False, "message": str(e)}), 500
     finally:
         conn.close()

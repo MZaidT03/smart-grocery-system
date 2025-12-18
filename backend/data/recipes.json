@@ -1,0 +1,945 @@
+[
+  {
+    "id": 1,
+    "name": "Aloo Gobi",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Potato",
+      "Cauliflower",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Green Chilies",
+      "Coriander Leaves",
+      "Turmeric",
+      "Red Chili Powder",
+      "Garam Masala"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 2,
+    "name": "Chicken Karahi",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chicken",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Green Chilies",
+      "Coriander Leaves",
+      "Yogurt",
+      "Cooking Oil",
+      "Black Pepper",
+      "Red Chili Powder"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 3,
+    "name": "Daal Chawal",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Daal Masoor",
+      "Daal Moong",
+      "Super Basmati Rice",
+      "Onion",
+      "Garlic",
+      "Turmeric",
+      "Red Chili Powder",
+      "Cumin Seeds"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 4,
+    "name": "Omelette & Toast",
+    "cuisine": "Breakfast",
+    "ingredients": [
+      "Eggs",
+      "Bread",
+      "Onion",
+      "Green Chilies",
+      "Salt",
+      "Cooking Oil"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 5,
+    "name": "Pasta Carbonara (Desi Style)",
+    "cuisine": "Fusion",
+    "ingredients": [
+      "Pasta",
+      "Chicken",
+      "Cream",
+      "Cheese Slices",
+      "Black Pepper",
+      "Salt",
+      "Garlic",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 6,
+    "name": "Mixed Vegetable Curry",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Potato",
+      "Carrot",
+      "Peas",
+      "Onion",
+      "Tomato",
+      "Turmeric",
+      "Red Chili Powder",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 7,
+    "name": "Banana Smoothie",
+    "cuisine": "Beverage",
+    "ingredients": ["Banana", "Fresh Milk", "Honey", "Yogurt"],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 8,
+    "name": "Chicken Biryani",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chicken",
+      "Super Basmati Rice",
+      "Yogurt",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Biryani Masala",
+      "Potato",
+      "Cooking Oil"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 9,
+    "name": "Aloo Keema",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Beef Mince",
+      "Potato",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Green Chilies",
+      "Turmeric",
+      "Red Chili Powder",
+      "Garam Masala",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 10,
+    "name": "Chicken Jalfrezi",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chicken",
+      "Bell Peppers",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Soy Sauce",
+      "Vinegar",
+      "Red Chili Powder",
+      "Black Pepper",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 11,
+    "name": "Halwa Puri",
+    "cuisine": "Breakfast",
+    "ingredients": [
+      "Semolina",
+      "Sugar",
+      "Ghee",
+      "Cardamom",
+      "Maida (All Purpose Flour)",
+      "Cooking Oil",
+      "Water"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 12,
+    "name": "Chana Chaat",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chickpeas",
+      "Potato",
+      "Onion",
+      "Tomato",
+      "Green Chilies",
+      "Lemon Juice",
+      "Chaat Masala",
+      "Coriander Leaves"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 13,
+    "name": "Palak Paneer",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Spinach",
+      "Paneer",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Cream",
+      "Garam Masala",
+      "Cumin Seeds",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 14,
+    "name": "Nihari",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Beef Shank",
+      "Wheat Flour",
+      "Onion",
+      "Ginger",
+      "Garlic",
+      "Nihari Masala",
+      "Ghee",
+      "Coriander Leaves",
+      "Lemon"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 15,
+    "name": "Aloo Paratha",
+    "cuisine": "Breakfast",
+    "ingredients": [
+      "Whole Wheat Flour",
+      "Potato",
+      "Green Chilies",
+      "Coriander Leaves",
+      "Cumin Seeds",
+      "Salt",
+      "Ghee"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 16,
+    "name": "Chicken Tikka",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chicken",
+      "Yogurt",
+      "Ginger",
+      "Garlic",
+      "Lemon Juice",
+      "Red Chili Powder",
+      "Garam Masala",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 17,
+    "name": "Aloo Baingan",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Eggplant",
+      "Potato",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Turmeric",
+      "Red Chili Powder",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 18,
+    "name": "Seekh Kebab",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Beef Mince",
+      "Onion",
+      "Green Chilies",
+      "Coriander Leaves",
+      "Ginger",
+      "Garlic",
+      "Garam Masala",
+      "Cumin Powder",
+      "Egg"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 19,
+    "name": "Khichdi",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Super Basmati Rice",
+      "Daal Moong",
+      "Potato",
+      "Onion",
+      "Turmeric",
+      "Cumin Seeds",
+      "Ghee",
+      "Salt"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 20,
+    "name": "Shami Kebab",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Beef Mince",
+      "Daal Chana",
+      "Onion",
+      "Green Chilies",
+      "Ginger",
+      "Garlic",
+      "Egg",
+      "Garam Masala",
+      "Cooking Oil"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 21,
+    "name": "Mango Lassi",
+    "cuisine": "Beverage",
+    "ingredients": ["Mango", "Yogurt", "Fresh Milk", "Sugar", "Cardamom"],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 22,
+    "name": "Chicken Korma",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chicken",
+      "Yogurt",
+      "Onion",
+      "Ginger",
+      "Garlic",
+      "Almonds",
+      "Cashews",
+      "Cream",
+      "Garam Masala",
+      "Cooking Oil"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 23,
+    "name": "Achar Gosht",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Mutton",
+      "Pickle Masala",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Yogurt",
+      "Mustard Oil",
+      "Green Chilies"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 24,
+    "name": "Dahi Bhalla",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Daal Moong",
+      "Yogurt",
+      "Tamarind Chutney",
+      "Green Chutney",
+      "Cumin Powder",
+      "Red Chili Powder",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 25,
+    "name": "Fried Fish",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Fish",
+      "Gram Flour",
+      "Red Chili Powder",
+      "Turmeric",
+      "Garam Masala",
+      "Ginger",
+      "Garlic",
+      "Lemon Juice",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 26,
+    "name": "Chana Daal",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chana Daal",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Turmeric",
+      "Red Chili Powder",
+      "Cumin Seeds",
+      "Ghee"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 27,
+    "name": "Egg Fried Rice",
+    "cuisine": "Fusion",
+    "ingredients": [
+      "Super Basmati Rice",
+      "Eggs",
+      "Carrot",
+      "Peas",
+      "Soy Sauce",
+      "Garlic",
+      "Green Onion",
+      "Cooking Oil"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 28,
+    "name": "Malai Boti",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chicken",
+      "Cream",
+      "Cheese",
+      "Yogurt",
+      "Ginger",
+      "Garlic",
+      "White Pepper",
+      "Cardamom",
+      "Lemon Juice"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 29,
+    "name": "Aloo Samosa",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Maida (All Purpose Flour)",
+      "Potato",
+      "Peas",
+      "Onion",
+      "Green Chilies",
+      "Coriander Leaves",
+      "Cumin Seeds",
+      "Garam Masala",
+      "Cooking Oil"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 30,
+    "name": "Chapli Kebab",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Beef Mince",
+      "Tomato",
+      "Onion",
+      "Green Chilies",
+      "Coriander Seeds",
+      "Pomegranate Seeds",
+      "Egg",
+      "Corn Flour",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 31,
+    "name": "Chicken Corn Soup",
+    "cuisine": "Fusion",
+    "ingredients": [
+      "Chicken",
+      "Sweet Corn",
+      "Corn Flour",
+      "Eggs",
+      "Soy Sauce",
+      "Black Pepper",
+      "Salt",
+      "Water"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 32,
+    "name": "Mutton Pulao",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Mutton",
+      "Super Basmati Rice",
+      "Yogurt",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Whole Spices",
+      "Cooking Oil"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 33,
+    "name": "Gajar Ka Halwa",
+    "cuisine": "Dessert",
+    "ingredients": [
+      "Carrot",
+      "Fresh Milk",
+      "Sugar",
+      "Ghee",
+      "Cardamom",
+      "Almonds",
+      "Cashews"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 34,
+    "name": "Bhindi Masala",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Okra",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Green Chilies",
+      "Turmeric",
+      "Red Chili Powder",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 35,
+    "name": "Paya",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Goat Trotters",
+      "Onion",
+      "Ginger",
+      "Garlic",
+      "Whole Spices",
+      "Coriander Leaves",
+      "Lemon",
+      "Cooking Oil"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 36,
+    "name": "Chicken Nuggets",
+    "cuisine": "Fusion",
+    "ingredients": [
+      "Chicken",
+      "Bread Crumbs",
+      "Eggs",
+      "Maida (All Purpose Flour)",
+      "Black Pepper",
+      "Garlic Powder",
+      "Salt",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 37,
+    "name": "Baingan Bharta",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Eggplant",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Green Chilies",
+      "Coriander Leaves",
+      "Turmeric",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 38,
+    "name": "Chicken Manchurian",
+    "cuisine": "Fusion",
+    "ingredients": [
+      "Chicken",
+      "Cornflour",
+      "Soy Sauce",
+      "Vinegar",
+      "Garlic",
+      "Ginger",
+      "Green Onion",
+      "Bell Peppers",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 39,
+    "name": "Sheer Khurma",
+    "cuisine": "Dessert",
+    "ingredients": [
+      "Vermicelli",
+      "Fresh Milk",
+      "Sugar",
+      "Dates",
+      "Almonds",
+      "Cashews",
+      "Cardamom",
+      "Ghee"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 40,
+    "name": "Daal Makhani",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Daal Mash",
+      "Kidney Beans",
+      "Butter",
+      "Cream",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Garam Masala",
+      "Red Chili Powder"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 41,
+    "name": "Paratha Roll",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Paratha",
+      "Chicken",
+      "Onion",
+      "Mayonnaise",
+      "Ketchup",
+      "Green Chutney",
+      "Lettuce",
+      "Eggs"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 42,
+    "name": "Mutton Karahi",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Mutton",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Green Chilies",
+      "Coriander Leaves",
+      "Black Pepper",
+      "Cooking Oil"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 43,
+    "name": "Lassi",
+    "cuisine": "Beverage",
+    "ingredients": ["Yogurt", "Water", "Sugar", "Salt", "Cumin Powder"],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 44,
+    "name": "Chicken Biryani (Sindhi Style)",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chicken",
+      "Super Basmati Rice",
+      "Yogurt",
+      "Potato",
+      "Tomato",
+      "Dried Plum",
+      "Ginger",
+      "Garlic",
+      "Biryani Masala",
+      "Cooking Oil"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 45,
+    "name": "Kofta Curry",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Beef Mince",
+      "Gram Flour",
+      "Onion",
+      "Tomato",
+      "Yogurt",
+      "Ginger",
+      "Garlic",
+      "Garam Masala",
+      "Cooking Oil"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 46,
+    "name": "French Fries",
+    "cuisine": "Snack",
+    "ingredients": ["Potato", "Salt", "Cooking Oil"],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 47,
+    "name": "Chicken Yakhni Pulao",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chicken",
+      "Super Basmati Rice",
+      "Yogurt",
+      "Onion",
+      "Whole Spices",
+      "Cumin Seeds",
+      "Ghee"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 48,
+    "name": "Aloo Tikki",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Potato",
+      "Bread Crumbs",
+      "Green Chilies",
+      "Coriander Leaves",
+      "Garam Masala",
+      "Cornflour",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 49,
+    "name": "Chicken White Karahi",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chicken",
+      "Yogurt",
+      "Cream",
+      "Ginger",
+      "Garlic",
+      "Green Chilies",
+      "White Pepper",
+      "Lemon Juice",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 50,
+    "name": "Gulab Jamun",
+    "cuisine": "Dessert",
+    "ingredients": [
+      "Milk Powder",
+      "Maida (All Purpose Flour)",
+      "Ghee",
+      "Sugar",
+      "Water",
+      "Cardamom",
+      "Rose Water"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 51,
+    "name": "Chicken Handi",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chicken",
+      "Yogurt",
+      "Cream",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Green Chilies",
+      "Garam Masala",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 52,
+    "name": "Saag",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Mustard Greens",
+      "Spinach",
+      "Onion",
+      "Tomato",
+      "Ginger",
+      "Garlic",
+      "Green Chilies",
+      "Cornmeal",
+      "Butter"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 53,
+    "name": "Chicken Shawarma",
+    "cuisine": "Fusion",
+    "ingredients": [
+      "Chicken",
+      "Yogurt",
+      "Garlic Sauce",
+      "Pickles",
+      "Lettuce",
+      "Tomato",
+      "Pita Bread",
+      "Lemon Juice",
+      "Cumin"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 54,
+    "name": "Pakora",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Gram Flour",
+      "Potato",
+      "Onion",
+      "Spinach",
+      "Green Chilies",
+      "Red Chili Powder",
+      "Cumin Seeds",
+      "Cooking Oil"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 55,
+    "name": "Kheer",
+    "cuisine": "Dessert",
+    "ingredients": [
+      "Super Basmati Rice",
+      "Fresh Milk",
+      "Sugar",
+      "Cardamom",
+      "Almonds",
+      "Cashews",
+      "Raisins"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 56,
+    "name": "Achari Chicken",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Chicken",
+      "Yogurt",
+      "Pickle Masala",
+      "Onion",
+      "Ginger",
+      "Garlic",
+      "Mustard Seeds",
+      "Fennel Seeds",
+      "Cooking Oil"
+    ],
+    "difficulty": "Medium"
+  },
+  {
+    "id": 57,
+    "name": "Kabuli Pulao",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Mutton",
+      "Super Basmati Rice",
+      "Carrot",
+      "Raisins",
+      "Almonds",
+      "Onion",
+      "Whole Spices",
+      "Sugar",
+      "Ghee"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 58,
+    "name": "Instant Noodles",
+    "cuisine": "Quick Meal",
+    "ingredients": [
+      "Instant Noodles",
+      "Eggs",
+      "Green Onion",
+      "Vegetables",
+      "Water"
+    ],
+    "difficulty": "Easy"
+  },
+  {
+    "id": 59,
+    "name": "Qeema Naan",
+    "cuisine": "Pakistani",
+    "ingredients": [
+      "Maida (All Purpose Flour)",
+      "Beef Mince",
+      "Onion",
+      "Green Chilies",
+      "Coriander Leaves",
+      "Garam Masala",
+      "Yogurt",
+      "Ghee"
+    ],
+    "difficulty": "Hard"
+  },
+  {
+    "id": 60,
+    "name": "Zarda",
+    "cuisine": "Dessert",
+    "ingredients": ["Zaid Tahir"],
+    "difficulty": "Medium"
+  }
+]

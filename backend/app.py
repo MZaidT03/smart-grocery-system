@@ -9,7 +9,7 @@ from routes.inventory import inventory_bp
 from routes.shopping import shopping_bp
 from routes.analytics import analytics_bp
 from routes.admin import admin_bp
-
+from routes.recipes import recipes_bp
 app = Flask(__name__)
 CORS(app)
 
@@ -22,6 +22,7 @@ app.register_blueprint(inventory_bp)
 app.register_blueprint(shopping_bp)
 app.register_blueprint(analytics_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(recipes_bp)
 
 if __name__ == '__main__':
     print(f"🚀 Grocery Backend Running on http://127.0.0.1:5000")
