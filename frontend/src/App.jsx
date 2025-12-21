@@ -15,6 +15,7 @@ import ProfilePage from "./pages/ProfilePage";
 import Dashboard from "./pages/Dashboard";
 import RecipesPage from "./pages/RecipesPage";
 import MarketPrices from "./pages/MarketPrice";
+import InventoryReport from "./pages/InventoryReport";
 
 const ProtectedRoute = ({ children }) => {
   const user = localStorage.getItem("user");
@@ -31,7 +32,6 @@ const App = () => {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-
         <Route
           path="/dashboard"
           element={
@@ -51,7 +51,7 @@ const App = () => {
         />
         <Route path="/shopping-list/:listId" element={<ShoppingList />} />
         <Route path="/market-prices" element={<MarketPrices />} />
-
+        <Route path="/inventory-report" element={<InventoryReport />} />{" "}
         <Route
           path="/profile"
           element={
@@ -60,7 +60,6 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-
         {/* Default Redirect */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

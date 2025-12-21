@@ -7,6 +7,7 @@ import {
   Bell,
   Check,
   X,
+  Layers,
 } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 
@@ -94,6 +95,13 @@ const Navbar = ({ user }) => {
         </Link>
 
         <div className="flex items-center space-x-3">
+          <Link
+            to="/inventory-report"
+            className="p-2 text-zinc-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-xl transition border border-transparent hover:border-emerald-500/20"
+            title="Smart Inventory Report"
+          >
+            <Layers className="w-5 h-5" />
+          </Link>
           {/* ANALYTICS */}
           <Link
             to="/analytics"
@@ -101,7 +109,6 @@ const Navbar = ({ user }) => {
           >
             <BarChart3 className="w-5 h-5" />
           </Link>
-
           {/* --- NOTIFICATIONS DROPDOWN --- */}
           <div className="relative" ref={notifRef}>
             <button
@@ -168,7 +175,6 @@ const Navbar = ({ user }) => {
               </div>
             )}
           </div>
-
           {/* PROFILE BADGE */}
           <Link
             to="/profile"
