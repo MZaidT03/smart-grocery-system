@@ -115,6 +115,14 @@ def init_db():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(item_name, consumption_unit)
                 )''')
+    c.execute("""CREATE TABLE IF NOT EXISTS product_batches (
+                    batch_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product_id INTEGER,
+                    quantity REAL,
+                    expiry_date DATE,
+                    added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(product_id) REFERENCES products(product_id)
+                )""")
     
     conn.commit()
     conn.close()

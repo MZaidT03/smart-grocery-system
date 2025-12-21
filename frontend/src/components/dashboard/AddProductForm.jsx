@@ -1,13 +1,24 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, Search, Clock, DollarSign } from "lucide-react"; // Import DollarSign
+import {
+  Plus,
+  Search,
+  Clock,
+  DollarSign,
+  Calendar,
+  Tag,
+  Layers,
+  Scale,
+} from "lucide-react";
 import { calculateMonthlyNeed } from "../../utils/formatters.jsx";
 
 const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
+  // ... (State logic remains exactly the same) ...
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("kg");
   const [category, setCategory] = useState("Staples");
   const [quantity, setQuantity] = useState("");
-  const [price, setPrice] = useState(""); // <--- NEW STATE
+  const [price, setPrice] = useState("");
+  const [shelfLife, setShelfLife] = useState(7);
   const [usageQty, setUsageQty] = useState(1);
   const [usagePeriod, setUsagePeriod] = useState("7");
   const [suggestions, setSuggestions] = useState([]);
@@ -30,13 +41,12 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
     "Other",
   ];
 
-  // Click outside listener logic (kept same)
   useEffect(() => {
-    function handleClickOutside(event) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
         setShowSuggestions(false);
       }
-    }
+    };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -44,25 +54,26 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
   const handleNameChange = (e) => {
     const val = e.target.value;
     setName(val);
-    if (val.length > 0) {
-      const matches = catalog.filter((item) =>
-        item.item_name.toLowerCase().includes(val.toLowerCase())
-      );
-      setSuggestions(matches.slice(0, 5));
-      setShowSuggestions(true);
-    } else {
-      setShowSuggestions(false);
-    }
+    if (!val) return setShowSuggestions(false);
+
+    const matches = catalog.filter((item) =>
+      item.item_name.toLowerCase().includes(val.toLowerCase())
+    );
+    setSuggestions(matches.slice(0, 5));
+    setShowSuggestions(true);
   };
 
   const selectSuggestion = (item) => {
     setName(item.item_name);
     setUnit(item.consumption_unit);
     setCategory(item.category);
-    // Smart Calc logic (kept same)
+
+    if (["Dairy", "Meat", "Fruits"].includes(item.category)) setShelfLife(5);
+    else if (["Vegetables", "Bakery"].includes(item.category)) setShelfLife(7);
+    else setShelfLife(180);
+
     const weeklyNeed = item.daily_consumption_per_person * householdSize * 7;
-    const roundedNeed = Math.max(0.5, Math.round(weeklyNeed * 2) / 2);
-    setUsageQty(roundedNeed);
+    setUsageQty(Math.max(0.5, Math.round(weeklyNeed * 2) / 2));
     setUsagePeriod("7");
     setShowSuggestions(false);
   };
@@ -75,168 +86,239 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
       name,
       unit,
       category,
-      quantity: parseFloat(quantity),
-      price: parseFloat(price) || 0, // <--- SEND PRICE
-      usageQty: parseFloat(usageQty),
-      usageDays: parseFloat(usagePeriod),
+      quantity: +quantity,
+      price: +price || 0,
+      shelfLife: +shelfLife,
+      usageQty: +usageQty,
+      usageDays: +usagePeriod,
     });
 
-    // Reset Form
     setName("");
     setQuantity("");
     setPrice("");
+    setShelfLife(7);
     setUsageQty(1);
     setUsagePeriod("7");
   };
 
+  const monthlyNeed = calculateMonthlyNeed(usageQty, usagePeriod);
+  const monthlyCost =
+    price && quantity > 0 && monthlyNeed
+      ? ((price / quantity) * monthlyNeed).toFixed(0)
+      : 0;
+
+  // Reusable styles for consistency
+  const labelStyle =
+    "block text-xs font-semibold text-zinc-400 mb-1.5 uppercase tracking-wide";
+  const inputStyle =
+    "w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2.5 text-white text-sm focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 outline-none transition-all";
+  const iconInputWrapper = "relative";
+  const iconStyle = "absolute left-3 top-3 w-4 h-4 text-zinc-500";
+
   return (
-    <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-2xl mb-10 shadow-lg relative z-0">
-      <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-        <Plus className="w-5 h-5 text-amber-400" /> Quick Add Item
-      </h2>
-      <form onSubmit={handleSubmit} className="grid md:grid-cols-12 gap-4">
-        {/* Name Input */}
-        <div className="md:col-span-3 relative" ref={wrapperRef}>
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Product Name"
-            value={name}
-            onChange={handleNameChange}
-            onFocus={() => name && setShowSuggestions(true)}
-            className="w-full pl-10 pr-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:border-amber-500/50 outline-none transition"
-            autoComplete="off"
-          />
-          {showSuggestions && suggestions.length > 0 && (
-            // ... Suggestions Dropdown (Same as before) ...
-            <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden">
-              {suggestions.map((item, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => selectSuggestion(item)}
-                  className="px-4 py-3 hover:bg-zinc-800 cursor-pointer border-b border-zinc-800 last:border-0 flex justify-between items-center group"
-                >
-                  <span className="text-sm font-medium text-white group-hover:text-amber-400">
-                    {item.item_name}
-                  </span>
-                  <span className="text-xs text-zinc-500 bg-zinc-950 px-2 py-1 rounded border border-zinc-800">
-                    {item.category}
-                  </span>
-                </div>
-              ))}
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl shadow-lg overflow-hidden">
+      {/* Header */}
+      <div className="bg-zinc-950/50 px-6 py-4 border-b border-zinc-800 flex items-center gap-3">
+        <div className="p-2 bg-amber-500/10 rounded-lg">
+          <Plus className="w-5 h-5 text-amber-500" />
+        </div>
+        <h2 className="text-lg font-bold text-white">Add Inventory</h2>
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-6 space-y-8">
+        {/* SECTION 1: BASIC INFO */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Product Name (Full Width on Mobile) */}
+          <div className="md:col-span-2 relative" ref={wrapperRef}>
+            <label className={labelStyle}>Product Name</label>
+            <div className={iconInputWrapper}>
+              <Search className={iconStyle} />
+              <input
+                value={name}
+                onChange={handleNameChange}
+                placeholder="e.g. Basmati Rice"
+                className={`${inputStyle} pl-10`}
+                autoComplete="off"
+              />
             </div>
-          )}
-        </div>
-
-        {/* Category Select */}
-        <div className="md:col-span-2">
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:border-amber-500/50 outline-none transition"
-          >
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Quantity Input */}
-        <div className="md:col-span-2 relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-bold uppercase">
-            Qty
-          </span>
-          <input
-            type="number"
-            placeholder="0"
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:border-amber-500/50 outline-none transition"
-          />
-        </div>
-
-        {/* PRICE INPUT (NEW) */}
-        <div className="md:col-span-2 relative">
-          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
-          <input
-            type="number"
-            placeholder="Price"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className="w-full pl-9 pr-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:border-emerald-500/50 outline-none transition font-mono"
-          />
-        </div>
-
-        {/* Unit Select */}
-        <div className="md:col-span-1">
-          <select
-            value={unit}
-            onChange={(e) => setUnit(e.target.value)}
-            className="w-full px-2 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:border-amber-500/50 outline-none transition text-sm"
-          >
-            <option value="kg">kg</option>
-            <option value="liters">L</option>
-            <option value="dozen">doz</option>
-            <option value="pieces">pcs</option>
-            <option value="packet">pkt</option>
-          </select>
-        </div>
-
-        {/* Submit Button */}
-        <div className="md:col-span-2">
-          <button
-            type="submit"
-            className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl transition border border-zinc-700 h-full"
-          >
-            Add Stock
-          </button>
-        </div>
-
-        {/* Rate Logic (Hidden but present for calculation) */}
-        {/* ... Keep the Consumption Rate inputs from your code here ... */}
-        <div className="md:col-span-12 grid md:grid-cols-12 gap-4 border-t border-zinc-800 pt-4 mt-2">
-          {/* ... Keep your existing rate inputs ... */}
-          <div className="md:col-span-3 flex items-center">
-            <label className="text-xs font-bold text-amber-500 uppercase flex items-center gap-2">
-              <Clock className="w-3 h-3" /> Consumption Rate:
-            </label>
+            {/* Suggestions Dropdown */}
+            {showSuggestions && (
+              <div className="absolute z-50 mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                {suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => selectSuggestion(s)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-zinc-800 flex justify-between group transition-colors"
+                  >
+                    <span className="text-sm text-white group-hover:text-amber-400">
+                      {s.item_name}
+                    </span>
+                    <span className="text-xs text-zinc-500">{s.category}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="md:col-span-2 relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">
-              Use
+
+          {/* Category */}
+          <div>
+            <label className={labelStyle}>Category</label>
+            <div className={iconInputWrapper}>
+              <Tag className={iconStyle} />
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className={`${inputStyle} pl-10 appearance-none`}
+              >
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Quantity & Unit Group */}
+          <div>
+            <label className={labelStyle}>Current Stock</label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Scale className={iconStyle} />
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  placeholder="0.00"
+                  className={`${inputStyle} pl-10`}
+                />
+              </div>
+              <select
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                className="w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-2 text-white text-sm outline-none focus:border-amber-500"
+              >
+                <option value="kg">kg</option>
+                <option value="liters">L</option>
+                <option value="pcs">pcs</option>
+                <option value="pkt">pkt</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div className="h-px bg-zinc-800 w-full" />
+
+        {/* SECTION 2: COSTS & SHELF LIFE */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className={labelStyle}>Total Price Paid (PKR)</label>
+            <div className={iconInputWrapper}>
+              <DollarSign className={`${iconStyle} text-emerald-500`} />
+              <input
+                type="number"
+                min="0"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="0"
+                className={`${inputStyle} pl-10`}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelStyle}>Estimated Shelf Life (Days)</label>
+            <div className={iconInputWrapper}>
+              <Calendar className={`${iconStyle} text-orange-400`} />
+              <input
+                type="number"
+                min="1"
+                value={shelfLife}
+                onChange={(e) => setShelfLife(e.target.value)}
+                placeholder="7"
+                className={`${inputStyle} pl-10`}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="h-px bg-zinc-800 w-full" />
+
+        {/* SECTION 3: CONSUMPTION & SUMMARY */}
+        <div className="bg-zinc-950/50 rounded-xl p-4 border border-zinc-800">
+          <div className="flex items-center gap-2 mb-4">
+            <Layers className="w-4 h-4 text-blue-400" />
+            <span className="text-sm font-bold text-zinc-300">
+              Consumption Pattern
             </span>
-            <input
-              type="number"
-              value={usageQty}
-              onChange={(e) => setUsageQty(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 outline-none focus:border-amber-500 text-sm"
-            />
           </div>
-          <div className="md:col-span-3">
-            <select
-              value={usagePeriod}
-              onChange={(e) => setUsagePeriod(e.target.value)}
-              className="w-full px-4 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 outline-none focus:border-amber-500 text-sm"
-            >
-              <option value="1">Daily</option>
-              <option value="7">Weekly</option>
-              <option value="30">Monthly</option>
-            </select>
-          </div>
-          <div className="md:col-span-4 flex items-center text-xs text-zinc-500 bg-zinc-950/30 px-3 rounded-lg border border-dashed border-zinc-800">
-            <span>
-              ≈ Need{" "}
-              <strong>
-                {calculateMonthlyNeed(usageQty, usagePeriod)} {unit}
-              </strong>{" "}
-              / month.
-            </span>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+            {/* Consumption Inputs */}
+            <div>
+              <label className={labelStyle}>I typically use...</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0.1"
+                  step="any"
+                  value={usageQty}
+                  onChange={(e) => setUsageQty(e.target.value)}
+                  className={`${inputStyle} text-center`}
+                  style={{ width: "80px" }}
+                />
+                <span className="text-sm text-zinc-500 font-medium">
+                  {unit}
+                </span>
+                <span className="text-sm text-zinc-500">every</span>
+                <select
+                  value={usagePeriod}
+                  onChange={(e) => setUsagePeriod(e.target.value)}
+                  className="flex-1 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-amber-500"
+                >
+                  <option value="1">Day</option>
+                  <option value="7">Week</option>
+                  <option value="30">Month</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Live Summary Card */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 flex justify-between items-center">
+              <div>
+                <div className="text-[10px] uppercase text-zinc-500 font-bold tracking-wider">
+                  Projected Monthly Need
+                </div>
+                <div className="text-xl font-mono text-white mt-1">
+                  {monthlyNeed}{" "}
+                  <span className="text-sm text-zinc-500">{unit}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] uppercase text-zinc-500 font-bold tracking-wider">
+                  Est. Cost
+                </div>
+                <div className="text-sm font-mono text-emerald-400 mt-1">
+                  {monthlyCost > 0 ? `Rs ${monthlyCost}` : "--"}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* SUBMIT BUTTON */}
+        <button
+          type="submit"
+          className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-lg shadow-lg shadow-orange-500/20 transition-all transform hover:scale-[1.01] active:scale-[0.99]"
+        >
+          Add Item to Inventory
+        </button>
       </form>
     </div>
   );
 };
+
 export default AddProductForm;

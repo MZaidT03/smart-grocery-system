@@ -3,12 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { Package, ListPlus, ChefHat, DollarSign } from "lucide-react";
 
 // Components
-import Navbar from "../components/dashboard/Navbar";
+import Navbar from "../components/dashboard/NavBar";
 import AddProductForm from "../components/dashboard/AddProductForm";
 import InventoryTable from "../components/dashboard/InventoryTable";
-import GenerateListModal from "../components/dashboard/GenerateListModal"; // Check your path: might be ../components/modals/GenerateListModal depending on your structure
-import ConsumeModal from "../components/dashboard/ConsumeModal"; // Check path
-import RestockModal from "../components/dashboard/RestockModal"; // Check path
+import GenerateListModal from "../components/dashboard/GenerateListModal";
+import ConsumeModal from "../components/dashboard/ConsumeModal";
+
+// REMOVED: RestockModal import (now handled inside InventoryTable)
 
 const Dashboard = () => {
   const [products, setProducts] = useState([]);
@@ -19,7 +20,8 @@ const Dashboard = () => {
   // Modal States
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showConsumeModal, setShowConsumeModal] = useState(false);
-  const [showRestockModal, setShowRestockModal] = useState(false);
+
+  // REMOVED: showRestockModal state
 
   const navigate = useNavigate();
   const user = localStorage.getItem("user");
@@ -93,6 +95,7 @@ const Dashboard = () => {
       console.error("Delete error:", error);
     }
   };
+
   const handleUpdatePrice = async (id, name, newPrice) => {
     try {
       await fetch(`http://127.0.0.1:5000/products/${id}/price`, {
@@ -100,21 +103,40 @@ const Dashboard = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ price: newPrice, name: name }),
       });
-      fetchProducts(); // Refresh table
+      fetchProducts();
     } catch (e) {
       console.error(e);
     }
   };
 
   // --- Handlers for Table Actions ---
+
   const onConsumeClick = (product) => {
     setSelectedProduct(product);
     setShowConsumeModal(true);
   };
 
-  const onRestockClick = (product) => {
-    setSelectedProduct(product);
-    setShowRestockModal(true);
+  // NEW: Handle the Restock Submission from the InventoryTable
+  const handleRestockSubmit = async (productId, data) => {
+    try {
+      // The data object contains { added_quantity, new_price, new_expiry_days }
+      const res = await fetch(
+        `http://127.0.0.1:5000/products/${productId}/restock`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...data, userId }),
+        }
+      );
+
+      if (res.ok) {
+        fetchProducts(); // Refresh to show new stock/expiry
+      } else {
+        console.error("Restock failed");
+      }
+    } catch (error) {
+      console.error("Restock error:", error);
+    }
   };
 
   return (
@@ -135,7 +157,6 @@ const Dashboard = () => {
 
           {/* ACTION BUTTONS */}
           <div className="flex gap-3">
-            {/* RECIPES BUTTON */}
             <button
               onClick={() => navigate("/recipes")}
               className="flex items-center px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl border border-zinc-700 transition-all transform hover:scale-[1.02]"
@@ -143,7 +164,6 @@ const Dashboard = () => {
               <ChefHat className="w-5 h-5 mr-2 text-amber-500" /> Smart Cook
             </button>
 
-            {/* NEW: PRICES BUTTON */}
             <button
               onClick={() => navigate("/market-prices")}
               className="flex items-center px-4 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-bold rounded-xl border border-zinc-700 transition-all transform hover:scale-[1.02]"
@@ -151,7 +171,6 @@ const Dashboard = () => {
               <DollarSign className="w-5 h-5 mr-2 text-emerald-500" /> Prices
             </button>
 
-            {/* SHOPPING LIST BUTTON */}
             <button
               onClick={() => setShowGenerateModal(true)}
               className="flex items-center px-5 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl shadow-lg shadow-amber-500/20 transition-all transform hover:scale-[1.02]"
@@ -167,13 +186,15 @@ const Dashboard = () => {
           onAddProduct={handleAddProduct}
         />
 
+        {/* Updated Table: Passed handleRestockSubmit instead of onRestockClick */}
         <InventoryTable
           products={products}
           householdSize={householdSize}
           onConsumeClick={onConsumeClick}
-          onRestockClick={onRestockClick}
+          onRestockSubmit={handleRestockSubmit}
           onDeleteClick={handleDelete}
           onUpdatePrice={handleUpdatePrice}
+          onRefresh={fetchProducts}
         />
       </div>
 
@@ -194,15 +215,6 @@ const Dashboard = () => {
           userId={userId}
           onClose={() => setShowConsumeModal(false)}
           onConsumeComplete={fetchProducts}
-        />
-      )}
-
-      {showRestockModal && selectedProduct && (
-        <RestockModal
-          product={selectedProduct}
-          userId={userId}
-          onClose={() => setShowRestockModal(false)}
-          onRestockComplete={fetchProducts}
         />
       )}
     </div>
