@@ -4,9 +4,14 @@ from datetime import datetime, timedelta
 import sys
 import os
 
-# Ensure we can import from utils
+# Ensure we can import utils
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from utils import hash_password
+try:
+    from utils import hash_password
+except ImportError:
+    # Fallback if utils.py isn't found/configured yet
+    import hashlib
+    def hash_password(p): return hashlib.sha256(p.encode()).hexdigest()
 
 # Configuration
 DB_NAME = "grocery.db"
@@ -22,7 +27,6 @@ def seed_user(conn):
     print(f"👤 Fixing Test User (ID: {USER_ID})...")
     real_hash = hash_password(RAW_PASSWORD)
     
-    # FIX: Using 'diet_preference' based on your schema
     try:
         conn.execute(
             """INSERT OR REPLACE INTO users (user_id, username, email, password_hash, household_size, diet_preference) 
@@ -32,70 +36,115 @@ def seed_user(conn):
     except Exception as e:
         print(f"   ⚠️ User Seed Error: {e}")
 
-def seed_products(conn):
-    print("📦 Seeding Inventory Products...")
+def seed_products_and_batches(conn):
+    print("📦 Seeding Inventory & Batches (FIFO)...")
+    
+    # Check if batches table exists, create if not (safety check)
+    conn.execute("""CREATE TABLE IF NOT EXISTS product_batches (
+                    batch_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product_id INTEGER,
+                    quantity REAL,
+                    expiry_date DATE,
+                    added_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(product_id) REFERENCES products(product_id)
+                )""")
+
+    # Clear old data
+    conn.execute("DELETE FROM product_batches WHERE product_id IN (SELECT product_id FROM products WHERE user_id=?)", (USER_ID,))
+    conn.execute("DELETE FROM products WHERE user_id=?", (USER_ID,))
+
+    # Data Structure: 
+    # (Name, Unit, TotalQty, Category, Price, FreqQty, FreqDays, [Batch_Days_From_Now_List])
+    # Batch List: [2, 10] means Batch 1 expires in 2 days, Batch 2 in 10 days.
+    
     products = [
-        ("Super Basmati Rice", "kg", 10.0, "Staples", 350, 5, 30),
-        ("Wheat Flour (Atta)", "kg", 20.0, "Staples", 180, 10, 30),
-        ("Dawn Bread Large", "packet", 2.0, "Bakery", 220, 1, 3),
-        ("Chicken Breast", "kg", 5.0, "Meat", 850, 2, 7),
-        ("Eggs (Dozen)", "dozen", 3.0, "Dairy", 320, 1, 4),
-        ("Daal Chana", "kg", 4.0, "Pulses", 280, 1, 15),
-        ("Milk Pack", "liters", 12.0, "Dairy", 260, 2, 1),
-        ("Cooking Oil", "liters", 5.0, "Oil & Ghee", 550, 3, 30),
-        ("Bananas", "dozen", 2.0, "Fruits", 150, 1, 3),
-        ("Onions", "kg", 5.0, "Vegetables", 120, 2, 10),
-        ("Tomatoes", "kg", 3.0, "Vegetables", 180, 1, 7),
-        ("Lays Masala", "packet", 15.0, "Snacks", 100, 2, 5),
-        ("Coke 1.5L", "bottle", 6.0, "Beverages", 160, 2, 7),
-        ("Ketchup", "bottle", 1.0, "Condiments", 450, 1, 30)
+        # --- HIGH VALUE (Class A) ---
+        ("Super Basmati Rice", "kg", 20.0, "Staples", 350, 5, 30, [180]), # 6 months exp
+        ("Olive Oil (Imported)", "liters", 3.0, "Oil & Ghee", 2500, 0.5, 30, [365]),
+        ("Frozen Prawns", "packet", 4.0, "Seafood", 1800, 1, 14, [60]),
+        
+        # --- MEDIUM VALUE (Class B) ---
+        ("Chicken Breast", "kg", 5.0, "Meat", 850, 2, 7, [4]), # Expiring soon
+        ("Cooking Oil", "liters", 10.0, "Oil & Ghee", 550, 3, 30, [90, 120]), # 2 Batches
+        ("Tea (Danedar)", "packet", 2.0, "Beverages", 1400, 1, 30, [300]),
+        ("Milk Pack", "liters", 12.0, "Dairy", 280, 2, 1, [5, 15, 30]), # 3 Batches (FIFO test)
+        
+        # --- LOW VALUE / HIGH FREQ (Class C) ---
+        ("Dawn Bread Large", "packet", 2.0, "Bakery", 220, 1, 3, [3]), # Alert!
+        ("Eggs (Dozen)", "dozen", 3.0, "Dairy", 350, 1, 4, [10]),
+        ("Bananas", "dozen", 2.0, "Fruits", 150, 1, 3, [2]), # Critical Alert
+        ("Tomatoes", "kg", 3.0, "Vegetables", 180, 1, 7, [5]),
+        ("Lays Masala", "packet", 15.0, "Snacks", 100, 2, 5, [60]),
+        ("Coke 1.5L", "bottle", 6.0, "Beverages", 160, 2, 7, [90]),
+        ("Yogurt", "kg", 2.0, "Dairy", 240, 0.5, 1, [-1]), # EXPIRED ITEM (Test Red Alert)
     ]
 
     product_map = {} 
 
-    for name, unit, qty, cat, price, f_qty, f_days in products:
+    for name, unit, total_qty, cat, price, f_qty, f_days, batch_days in products:
+        # 1. Insert Product
         cursor = conn.execute(
             """INSERT INTO products (user_id, item_name, consumption_unit, current_quantity, initial_quantity, category, price, usage_freq_qty, usage_freq_days, is_active) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-               ON CONFLICT(user_id, item_name, consumption_unit) DO UPDATE SET 
-               current_quantity = ?, price = ?
                RETURNING product_id""",
-            (USER_ID, name, unit, qty, qty, cat, price, f_qty, f_days, qty, price)
+            (USER_ID, name, unit, total_qty, total_qty, cat, price, f_qty, f_days)
         )
         pid = cursor.fetchone()[0]
         product_map[name] = pid
+
+        # 2. Insert Batches
+        # Distribute total quantity across batches evenly for simplicity
+        qty_per_batch = total_qty / len(batch_days)
+        today = datetime.now()
+        
+        for days in batch_days:
+            exp_date = (today + timedelta(days=days)).strftime("%Y-%m-%d")
+            conn.execute(
+                "INSERT INTO product_batches (product_id, quantity, expiry_date) VALUES (?, ?, ?)",
+                (pid, qty_per_batch, exp_date)
+            )
     
     return product_map
 
 def seed_consumption_logs(conn, product_map):
-    print("📊 Generating 6 Months of Consumption History...")
+    print("📊 Generating Seasonal Consumption Trends...")
     conn.execute("DELETE FROM consumption_logs WHERE user_id = ?", (USER_ID,))
     
     today = datetime.now()
     
-    # 1. High Frequency Items
-    for item in ["Milk Pack", "Eggs (Dozen)", "Dawn Bread Large", "Coke 1.5L"]:
-        pid = product_map.get(item)
-        if not pid: continue
-        for _ in range(25):
-            days_ago = random.randint(1, 90)
-            date_str = (today - timedelta(days=days_ago)).strftime("%Y-%m-%d %H:%M:%S")
-            conn.execute("INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) VALUES (?, ?, ?, ?)",
-                         (pid, USER_ID, random.uniform(0.5, 2.0), date_str))
+    # 1. Simulate "Winter" (Dec/Jan) - High usage of Coffee, Soup (Simulated via existing items)
+    # We will fake High usage of "Chicken" and "Eggs" in winter
+    winter_items = ["Chicken Breast", "Eggs (Dozen)", "Tea (Danedar)"]
+    
+    # 2. Simulate "Summer" (Jun/Jul) - High usage of Drinks
+    summer_items = ["Coke 1.5L", "Yogurt", "Milk Pack"]
 
-    # 2. Velocity Trend Data
-    for i in range(6):
-        month_offset = 5 - i 
-        num_logs = 10 + (i * 5) 
-        for _ in range(num_logs):
-            rand_prod = random.choice(list(product_map.values()))
-            days_ago = (month_offset * 30) + random.randint(1, 28)
-            date_str = (today - timedelta(days=days_ago)).strftime("%Y-%m-%d %H:%M:%S")
-            conn.execute("INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) VALUES (?, ?, ?, ?)",
-                         (rand_prod, USER_ID, random.uniform(0.1, 1.5), date_str))
+    # Generate logs for last 12 months
+    for i in range(365):
+        date_obj = today - timedelta(days=i)
+        date_str = date_obj.strftime("%Y-%m-%d %H:%M:%S")
+        month = date_obj.month
+        
+        # Determine active season items
+        active_items = []
+        if month in [12, 1, 2]: # Winter
+            active_items = winter_items
+        elif month in [6, 7, 8]: # Summer
+            active_items = summer_items
+        else:
+            active_items = ["Dawn Bread Large", "Super Basmati Rice"] # Normal
+
+        # 30% chance to consume an item on any given day
+        if random.random() < 0.3:
+            item_name = random.choice(active_items)
+            pid = product_map.get(item_name)
+            if pid:
+                qty = random.uniform(1.0, 3.0)
+                conn.execute("INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) VALUES (?, ?, ?, ?)",
+                             (pid, USER_ID, qty, date_str))
 
 def seed_consumption_summary(conn):
-    print("🧠 Syncing Smart Prediction Data (Consumption Summary)...")
+    print("🧠 Syncing Analytics Data...")
     conn.execute("DELETE FROM consumption_summary WHERE user_id = ?", (USER_ID,))
     
     conn.execute("""
@@ -106,65 +155,47 @@ def seed_consumption_summary(conn):
         GROUP BY product_id, date(consumption_date)
     """, (USER_ID,))
 
-def seed_spending_logs(conn):
-    print("💰 Generating Spending Logs...")
-    
-    # FIX: Drop and Recreate Table to ensure 'user_id' column exists
-    conn.execute("DROP TABLE IF EXISTS spending_logs")
-    conn.execute("""
-        CREATE TABLE spending_logs (
-            log_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            month_str TEXT,
-            total_spent REAL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+def seed_price_history(conn):
+    print("📈 Generating Inflation Data...")
+    conn.execute("DELETE FROM price_history")
     
     today = datetime.now()
-    for i in range(6):
-        month_date = today - timedelta(days=30 * (5-i))
-        month_str = month_date.strftime("%b") # Jan, Feb...
-        
-        # Increasing spending trend
-        spent = 5000 + (i * 1500) + random.randint(-500, 500)
-        
-        conn.execute("INSERT INTO spending_logs (user_id, month_str, total_spent) VALUES (?, ?, ?)",
-                     (USER_ID, month_str, spent))
+    items = [
+        ("Cooking Oil", 450, 550), # Price rose from 450 to 550
+        ("Milk Pack", 220, 280),
+        ("Eggs (Dozen)", 250, 350),
+        ("Super Basmati Rice", 300, 350)
+    ]
 
-def seed_price_history(conn, product_map):
-    print("📈 Generating Price History (Inflation Data)...")
-    conn.execute("DELETE FROM price_history WHERE item_name IN (SELECT item_name FROM products WHERE user_id=?)", (USER_ID,))
-    
-    today = datetime.now()
-    
-    # Create history for a few key items
-    for item_name in ["Milk Pack", "Cooking Oil", "Chicken Breast", "Eggs (Dozen)"]:
-        base_price = 200 # Dummy base
-        for i in range(3):
-            # Create a price from 3 months ago, 2 months ago, etc.
-            past_date = (today - timedelta(days=30 * (3-i))).strftime("%Y-%m-%d")
-            # Price increases slightly each month
-            hist_price = base_price + (i * 20) 
+    for name, start_price, end_price in items:
+        # Generate 6 data points over 6 months
+        for i in range(6):
+            date_str = (today - timedelta(days=30 * (5-i))).strftime("%Y-%m-%d")
+            # Linear interpolation of price
+            price = start_price + ((end_price - start_price) / 5) * i
             conn.execute("INSERT INTO price_history (item_name, price, date) VALUES (?, ?, ?)",
-                         (item_name, hist_price, past_date))
+                         (name, price, date_str))
 
 def seed_main():
     try:
         conn = get_db()
         seed_user(conn)
-        p_map = seed_products(conn)
-        seed_consumption_logs(conn, p_map)
+        p_map = seed_products_and_batches(conn) # Now handles batches!
+        seed_consumption_logs(conn, p_map)      # Now handles seasons!
         seed_consumption_summary(conn)
-        seed_spending_logs(conn)        
-        seed_price_history(conn, p_map)
+        seed_price_history(conn)
         
         conn.commit()
         print("\n✅ FULL SYSTEM SEED COMPLETE!")
+        print("   - Expiry Batches: Created (Check 'Yogurt' for expired alert)")
+        print("   - Seasonal Trends: Generated (Winter vs Summer patterns)")
+        print("   - ABC Analysis: Data ready (High Value: Rice/Oil)")
         print(f"👉 Login with: {USERNAME} / {RAW_PASSWORD}")
         
     except Exception as e:
         print(f"\n❌ Error: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         conn.close()
 
