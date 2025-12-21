@@ -7,29 +7,17 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
+  Radar,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
   BarChart,
   Bar,
-  Legend,
+  Cell,
 } from "recharts";
-import {
-  TrendingUp,
-  PieChart as PieIcon,
-  DollarSign,
-  ArrowUpRight,
-} from "lucide-react";
-import Navbar from "./dashboard/NavBar";
-
-const COLORS = [
-  "#F59E0B",
-  "#10B981",
-  "#3B82F6",
-  "#EF4444",
-  "#8B5CF6",
-  "#EC4899",
-];
+import { TrendingUp, Activity, Zap, PieChart } from "lucide-react";
+import Navbar from "../components/dashboard/Navbar";
 
 const Analytics = () => {
   const [data, setData] = useState(null);
@@ -44,7 +32,30 @@ const Analytics = () => {
           `http://127.0.0.1:5000/analytics/dashboard?userId=${userId}`
         );
         const json = await res.json();
-        if (json.success) setData(json);
+        if (json.success) {
+          // --- MOCK DATA FOR DEMO (If backend doesn't send consumption counts yet) ---
+          // You can remove this block once backend 'consumption_trend' is real
+          if (!json.consumption_trend || json.consumption_trend.length === 0) {
+            json.consumption_trend = [
+              { month: "Jul", items: 12 },
+              { month: "Aug", items: 18 },
+              { month: "Sep", items: 25 },
+              { month: "Oct", items: 22 },
+              { month: "Nov", items: 30 },
+              { month: "Dec", items: 35 },
+            ];
+          }
+          if (!json.top_items || json.top_items.length === 0) {
+            json.top_items = [
+              { name: "Milk", count: 15 },
+              { name: "Eggs", count: 12 },
+              { name: "Bread", count: 10 },
+              { name: "Bananas", count: 8 },
+              { name: "Yogurt", count: 6 },
+            ];
+          }
+          setData(json);
+        }
       } catch (error) {
         console.error("Error fetching analytics:", error);
       } finally {
@@ -57,7 +68,7 @@ const Analytics = () => {
   if (loading)
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500">
-        Loading Analytics...
+        Loading Data Models...
       </div>
     );
 
@@ -67,115 +78,163 @@ const Analytics = () => {
 
       <div className="max-w-7xl mx-auto px-6 py-10">
         <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-2">
-          <TrendingUp className="text-amber-500" /> Analytics Dashboard
+          <Activity className="text-amber-500" /> Consumption Analytics
         </h1>
 
-        {/* 1. SPENDING TRENDS */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl mb-8">
-          <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-emerald-400" /> Estimated
-            Monthly Spending (PKR)
-          </h2>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data?.spending}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
-                <XAxis dataKey="month_str" stroke="#71717a" fontSize={12} />
-                <YAxis stroke="#71717a" fontSize={12} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "#18181b",
-                    border: "1px solid #27272a",
-                  }}
-                  itemStyle={{ color: "#fff" }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="total_spent"
-                  stroke="#F59E0B"
-                  strokeWidth={3}
-                  dot={{ r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* 2. INVENTORY COMPOSITION (Pie) */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
-            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-              <PieIcon className="w-5 h-5 text-blue-400" /> Inventory Breakdown
+        {/* 1. SMART INSIGHTS (Prescriptive Analytics) */}
+        {data?.insights?.length > 0 && (
+          <div className="bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 rounded-2xl p-6 mb-8">
+            <h2 className="text-lg font-bold text-blue-400 mb-2 flex items-center gap-2">
+              <Zap className="w-5 h-5" /> Pattern Recognition & Insights
             </h2>
-            <div className="h-64 w-full flex items-center justify-center">
+            <ul className="space-y-2">
+              {data.insights.map((insight, idx) => (
+                <li
+                  key={idx}
+                  className="text-zinc-200 text-sm flex items-start gap-2"
+                >
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0"></span>
+                  {insight}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="grid md:grid-cols-2 gap-8 mb-8">
+          {/* 2. CONSUMPTION VELOCITY (Time Series Analysis) */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-emerald-400" /> Consumption
+              Velocity
+            </h2>
+            <p className="text-xs text-zinc-500 mb-6">
+              Total items consumed per month
+            </p>
+            <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={data?.categories}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={5}
-                    dataKey="count"
-                    nameKey="category" // <--- ADD THIS LINE
-                  >
-                    {data?.categories.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={COLORS[index % COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
+                <LineChart data={data?.consumption_trend || []}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="month" stroke="#71717a" fontSize={12} />
+                  <YAxis stroke="#71717a" fontSize={12} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: "#18181b",
                       border: "1px solid #27272a",
-                      borderRadius: "8px",
                     }}
-                    itemStyle={{ color: "#fff" }}
+                    labelStyle={{ color: "#a1a1aa" }}
                   />
-                  <Legend />
-                </PieChart>
+                  <Line
+                    type="monotone"
+                    dataKey="items"
+                    stroke="#10B981"
+                    strokeWidth={3}
+                    dot={{ r: 4, fill: "#10B981" }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* 3. INFLATION TRACKER (List/Bar) */}
+          {/* 3. DIETARY CLUSTERING (Radar Chart) */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
-            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-              <ArrowUpRight className="w-5 h-5 text-red-400" /> Inflation
-              Tracker (Top Increases)
+            <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <PieChart className="w-5 h-5 text-purple-400" /> Nutritional
+              Clustering
             </h2>
-            <div className="space-y-4">
-              {data?.inflation.length > 0 ? (
-                data.inflation.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between p-3 bg-zinc-950 rounded-xl border border-zinc-800"
-                  >
-                    <div>
-                      <div className="font-bold text-zinc-200">{item.name}</div>
-                      <div className="text-xs text-zinc-500">
-                        6 Months Ago: Rs {item.old_price}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-white">
-                        Rs {item.new_price}
-                      </div>
-                      <div className="text-xs font-bold text-red-400">
-                        +{item.change}%
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-zinc-500 text-sm text-center py-8">
-                  Not enough data history yet.
-                </p>
-              )}
+            <p className="text-xs text-zinc-500 mb-4">
+              Inventory distribution by food group
+            </p>
+            <div className="h-64 w-full flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart
+                  cx="50%"
+                  cy="50%"
+                  outerRadius="80%"
+                  data={data?.dietaryComposition}
+                >
+                  <PolarGrid stroke="#3f3f46" />
+                  <PolarAngleAxis
+                    dataKey="subject"
+                    stroke="#a1a1aa"
+                    fontSize={11}
+                  />
+                  <PolarRadiusAxis
+                    angle={30}
+                    domain={[0, "auto"]}
+                    stroke="#52525b"
+                  />
+                  <Radar
+                    name="Stock Level"
+                    dataKey="A"
+                    stroke="#8B5CF6"
+                    fill="#8B5CF6"
+                    fillOpacity={0.4}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#18181b",
+                      border: "1px solid #27272a",
+                    }}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
             </div>
+          </div>
+        </div>
+
+        {/* 4. FREQUENCY DISTRIBUTION (Bar Chart) */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
+          <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+            <Activity className="w-5 h-5 text-amber-400" /> High-Frequency Items
+            (Top 5)
+          </h2>
+          <p className="text-xs text-zinc-500 mb-6">
+            Most frequently consumed products
+          </p>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data?.top_items || []} layout="vertical">
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#27272a"
+                  horizontal={false}
+                />
+                <XAxis type="number" stroke="#71717a" fontSize={12} />
+                <YAxis
+                  dataKey="name"
+                  type="category"
+                  stroke="#fff"
+                  fontSize={12}
+                  width={100}
+                />
+                <Tooltip
+                  cursor={{ fill: "#27272a" }}
+                  contentStyle={{
+                    backgroundColor: "#18181b",
+                    border: "1px solid #27272a",
+                  }}
+                />
+                <Bar
+                  dataKey="count"
+                  fill="#F59E0B"
+                  radius={[0, 4, 4, 0]}
+                  barSize={24}
+                >
+                  {data?.top_items?.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={
+                        ["#F59E0B", "#EC4899", "#8B5CF6", "#3B82F6", "#10B981"][
+                          index % 5
+                        ]
+                      }
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>

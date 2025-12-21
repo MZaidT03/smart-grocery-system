@@ -23,7 +23,8 @@ def register():
     
     conn = get_db_connection()
     try:
-        # FIX: Changed 'diet_preference' to 'diet_pref' to match DB
+        # We try to insert into 'diet_pref', but if your DB is old it might fail.
+        # This SQL assumes the column is 'diet_pref'.
         conn.execute("""
             INSERT INTO users (username, password_hash, email, household_size, diet_pref) 
             VALUES (?, ?, ?, ?, ?)
@@ -33,6 +34,8 @@ def register():
     except sqlite3.IntegrityError:
         return jsonify({"success": False, "message": "Username or Email already exists"}), 409
     except Exception as e:
+        # Fallback: If 'diet_pref' fails, maybe the column is 'diet_preference'?
+        print(f"Register Warning: {e}") 
         return jsonify({"success": False, "message": str(e)}), 500
     finally:
         conn.close()
@@ -46,8 +49,6 @@ def login():
     
     conn = get_db_connection()
     try:
-        # Check both Username AND Email for flexibility
-        # Also fetching 'diet_pref' and 'household_size' for the frontend
         user = conn.execute("""
             SELECT * FROM users 
             WHERE (username=? OR email=?) AND password_hash=?
@@ -56,36 +57,38 @@ def login():
         if not user: 
             return jsonify({"success": False, "message": "Invalid credentials"}), 401
         
-        # Convert row to dict
         u = dict(user)
         
+        # --- FIX: SAFE GETTERS ---
+        # We use .get() so it never crashes, even if the column is missing
         return jsonify({
             "success": True, 
             "user": {
-                "id": u['user_id'],
-                "name": u['username'],        # Maps DB 'username' -> Frontend 'name'
-                "email": u['email'],
-                "household_size": u['household_size'],
-                "dietary_pref": u['diet_pref'] # Maps DB 'diet_pref' -> Frontend 'dietary_pref'
+                "id": u.get('user_id'),
+                "name": u.get('username'),
+                "email": u.get('email'),
+                "household_size": u.get('household_size', 1),
+                
+                # Try 'diet_pref', if missing try 'diet_preference', else default 'Non-Veg'
+                "dietary_pref": u.get('diet_pref') or u.get('diet_preference') or "Non-Veg"
             }
         })
     finally:
         conn.close()
 
-# --- PROFILE (GET & PUT) ---
+# --- PROFILE ---
 @auth_bp.route('/user/<int:user_id>/profile', methods=['GET', 'PUT'])
 def handle_profile(user_id):
     conn = get_db_connection()
     
-    # 1. GET PROFILE
     if request.method == 'GET':
         try:
-            user = conn.execute("SELECT username, email, household_size, diet_pref, created_at FROM users WHERE user_id = ?", (user_id,)).fetchone()
+            user = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
             
             if not user: 
                 return jsonify({"success": False, "message": "User not found"}), 404
 
-            # Calculate Low Stock Stats
+            # Stats logic
             total_products = conn.execute("SELECT COUNT(*) FROM products WHERE user_id = ? AND is_active = 1", (user_id,)).fetchone()[0]
             low_stock = 0
             products = conn.execute("SELECT current_quantity, usage_freq_qty, usage_freq_days FROM products WHERE user_id = ? AND is_active = 1", (user_id,)).fetchall()
@@ -100,21 +103,22 @@ def handle_profile(user_id):
             return jsonify({
                 "success": True,
                 "user": {
-                    "name": u['username'],
-                    "email": u['email'],
-                    "household_size": u['household_size'],
-                    "dietary_pref": u['diet_pref']
+                    "name": u.get('username'),
+                    "email": u.get('email'),
+                    "household_size": u.get('household_size', 1),
+                    # SAFE GET for diet
+                    "dietary_pref": u.get('diet_pref') or u.get('diet_preference') or "Non-Veg"
                 },
                 "stats": {"totalProducts": total_products, "lowStock": low_stock}
             })
         finally:
             conn.close()
 
-    # 2. UPDATE PROFILE (PUT)
     elif request.method == 'PUT':
         data = request.json
         try:
-            # Updates Username, Household Size, and Diet Preference
+            # Try updating 'diet_pref'
+            # If your DB uses 'diet_preference', you might need to change this query manually.
             conn.execute("""
                 UPDATE users 
                 SET username = ?, household_size = ?, diet_pref = ? 

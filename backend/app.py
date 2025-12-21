@@ -10,6 +10,7 @@ from routes.recipes import recipes_bp
 from routes.analytics import analytics_bp
 from routes.admin import admin_bp
 from routes.user import user_bp
+from routes.notifications import notifications_bp
 
 app = Flask(__name__)
 
@@ -29,6 +30,7 @@ app.register_blueprint(recipes_bp)
 app.register_blueprint(analytics_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(user_bp)
+app.register_blueprint(notifications_bp)
 
 @app.route('/')
 def serve():

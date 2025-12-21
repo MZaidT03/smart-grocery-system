@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Plus, Search, Clock } from "lucide-react";
+import { Plus, Search, Clock, DollarSign } from "lucide-react"; // Import DollarSign
 import { calculateMonthlyNeed } from "../../utils/formatters.jsx";
 
 const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
@@ -7,6 +7,7 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
   const [unit, setUnit] = useState("kg");
   const [category, setCategory] = useState("Staples");
   const [quantity, setQuantity] = useState("");
+  const [price, setPrice] = useState(""); // <--- NEW STATE
   const [usageQty, setUsageQty] = useState(1);
   const [usagePeriod, setUsagePeriod] = useState("7");
   const [suggestions, setSuggestions] = useState([]);
@@ -29,7 +30,7 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
     "Other",
   ];
 
-  // Click outside listener for suggestions
+  // Click outside listener logic (kept same)
   useEffect(() => {
     function handleClickOutside(event) {
       if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
@@ -58,7 +59,7 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
     setName(item.item_name);
     setUnit(item.consumption_unit);
     setCategory(item.category);
-    // Smart Calculation
+    // Smart Calc logic (kept same)
     const weeklyNeed = item.daily_consumption_per_person * householdSize * 7;
     const roundedNeed = Math.max(0.5, Math.round(weeklyNeed * 2) / 2);
     setUsageQty(roundedNeed);
@@ -70,12 +71,12 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
     e.preventDefault();
     if (!name || !quantity) return;
 
-    // Send data to parent
     onAddProduct({
       name,
       unit,
       category,
       quantity: parseFloat(quantity),
+      price: parseFloat(price) || 0, // <--- SEND PRICE
       usageQty: parseFloat(usageQty),
       usageDays: parseFloat(usagePeriod),
     });
@@ -83,6 +84,7 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
     // Reset Form
     setName("");
     setQuantity("");
+    setPrice("");
     setUsageQty(1);
     setUsagePeriod("7");
   };
@@ -93,7 +95,7 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
         <Plus className="w-5 h-5 text-amber-400" /> Quick Add Item
       </h2>
       <form onSubmit={handleSubmit} className="grid md:grid-cols-12 gap-4">
-        {/* Name Input with Suggestions */}
+        {/* Name Input */}
         <div className="md:col-span-3 relative" ref={wrapperRef}>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
           <input
@@ -106,6 +108,7 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
             autoComplete="off"
           />
           {showSuggestions && suggestions.length > 0 && (
+            // ... Suggestions Dropdown (Same as before) ...
             <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden">
               {suggestions.map((item, idx) => (
                 <div
@@ -126,7 +129,7 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
         </div>
 
         {/* Category Select */}
-        <div className="md:col-span-3">
+        <div className="md:col-span-2">
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -154,18 +157,30 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
           />
         </div>
 
+        {/* PRICE INPUT (NEW) */}
+        <div className="md:col-span-2 relative">
+          <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+          <input
+            type="number"
+            placeholder="Price"
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            className="w-full pl-9 pr-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:border-emerald-500/50 outline-none transition font-mono"
+          />
+        </div>
+
         {/* Unit Select */}
-        <div className="md:col-span-2">
+        <div className="md:col-span-1">
           <select
             value={unit}
             onChange={(e) => setUnit(e.target.value)}
-            className="w-full px-4 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:border-amber-500/50 outline-none transition"
+            className="w-full px-2 py-3 bg-zinc-950 border border-zinc-800 rounded-xl text-zinc-200 focus:border-amber-500/50 outline-none transition text-sm"
           >
             <option value="kg">kg</option>
-            <option value="liters">liters</option>
-            <option value="dozen">dozen</option>
-            <option value="pieces">pieces</option>
-            <option value="packet">packet</option>
+            <option value="liters">L</option>
+            <option value="dozen">doz</option>
+            <option value="pieces">pcs</option>
+            <option value="packet">pkt</option>
           </select>
         </div>
 
@@ -179,8 +194,10 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
           </button>
         </div>
 
-        {/* Rate Logic */}
+        {/* Rate Logic (Hidden but present for calculation) */}
+        {/* ... Keep the Consumption Rate inputs from your code here ... */}
         <div className="md:col-span-12 grid md:grid-cols-12 gap-4 border-t border-zinc-800 pt-4 mt-2">
+          {/* ... Keep your existing rate inputs ... */}
           <div className="md:col-span-3 flex items-center">
             <label className="text-xs font-bold text-amber-500 uppercase flex items-center gap-2">
               <Clock className="w-3 h-3" /> Consumption Rate:
@@ -204,19 +221,17 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
               className="w-full px-4 py-2 bg-zinc-950 border border-zinc-800 rounded-lg text-zinc-200 outline-none focus:border-amber-500 text-sm"
             >
               <option value="1">Daily</option>
-              <option value="7">Weekly (7 Days)</option>
-              <option value="14">Bi-Weekly (14 Days)</option>
-              <option value="30">Monthly (30 Days)</option>
-              <option value="60">Every 2 Months</option>
+              <option value="7">Weekly</option>
+              <option value="30">Monthly</option>
             </select>
           </div>
           <div className="md:col-span-4 flex items-center text-xs text-zinc-500 bg-zinc-950/30 px-3 rounded-lg border border-dashed border-zinc-800">
             <span>
-              ≈ You need approx{" "}
+              ≈ Need{" "}
               <strong>
                 {calculateMonthlyNeed(usageQty, usagePeriod)} {unit}
               </strong>{" "}
-              per month.
+              / month.
             </span>
           </div>
         </div>
@@ -224,5 +239,4 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
     </div>
   );
 };
-
 export default AddProductForm;
