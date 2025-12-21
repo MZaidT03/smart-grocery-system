@@ -1,130 +1,167 @@
 import React, { useState } from "react";
-import { Activity } from "lucide-react";
+import { Zap, AlertCircle, CheckCircle2 } from "lucide-react";
 import { formatDisplayQty } from "../../utils/formatters.jsx";
 
 const ConsumeModal = ({ product, onClose, userId, onConsumeComplete }) => {
-  const [consumeAmount, setConsumeAmount] = useState("");
+  const [customAmount, setCustomAmount] = useState("");
+  const [isPermanentUpdate, setIsPermanentUpdate] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleConfirm = async () => {
-    const newRateQty = document.getElementById("modal_rate_qty").value;
-    const newRateDays = document.getElementById("modal_rate_days").value;
+  // Default "Usual" amount comes from the product's settings
+  const usualAmount = product.usage_freq_qty || 1;
+
+  const handleConsume = async (amount, updateRate) => {
+    if (!amount || amount <= 0) return;
+    setSubmitting(true);
 
     try {
+      // Prepare payload
+      const payload = {
+        productId: product.id,
+        amount: parseFloat(amount),
+        userId,
+      };
+
+      // Only send new rate data if the user checked the box
+      if (updateRate) {
+        payload.newRateQty = parseFloat(amount);
+        payload.newRateDays = product.usage_freq_days; // Keep the same time period (e.g., Weekly), just update qty
+      }
+
       await fetch("http://127.0.0.1:5000/consume", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId: product.id,
-          amount: parseFloat(consumeAmount),
-          userId,
-          newRateQty: parseFloat(newRateQty),
-          newRateDays: parseFloat(newRateDays),
-        }),
+        body: JSON.stringify(payload),
       });
+
       onConsumeComplete();
       onClose();
     } catch (error) {
       console.error("Consume error:", error);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-4 animate-fade-in">
-      <div className="bg-zinc-900 p-6 rounded-2xl w-full max-w-sm border border-zinc-700 shadow-2xl">
-        <h2 className="text-xl font-bold text-white mb-1">Log Consumption</h2>
-        <p className="text-xs text-zinc-500 mb-4">
-          This will deduct stock and reset the auto-consumption timer.
-        </p>
-
-        {/* Stock Display */}
-        <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 mb-4 flex justify-between items-center">
-          <span className="text-zinc-400 text-sm">Current Stock:</span>
-          <span className="text-white font-mono font-bold">
-            {formatDisplayQty(product.quantity, product.unit)}
-          </span>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 px-4 animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-zinc-900 p-6 rounded-2xl w-full max-w-sm border border-zinc-700 shadow-2xl relative">
+        {/* Header */}
+        <div className="text-center mb-6">
+          <h2 className="text-xl font-bold text-white">Log Consumption</h2>
+          <p className="text-xs text-zinc-500">
+            {product.name} •{" "}
+            <span className="text-zinc-400">
+              Current Stock: {formatDisplayQty(product.quantity, product.unit)}
+            </span>
+          </p>
         </div>
 
-        {/* Input */}
-        <div className="relative mb-2">
-          <input
-            type="number"
-            value={consumeAmount}
-            onChange={(e) => setConsumeAmount(e.target.value)}
-            className="w-full bg-zinc-950 border border-zinc-700 px-4 py-3 rounded-xl text-white focus:border-amber-500 outline-none text-2xl font-mono text-center"
-            placeholder="0.00"
-            autoFocus
-          />
-          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-600 text-sm font-medium">
-            {product.unit}
-          </span>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => setConsumeAmount(product.quantity)}
-            className="flex-1 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded border border-zinc-700 transition"
-          >
-            Used All
-          </button>
-          <button
-            onClick={() => setConsumeAmount((product.quantity / 2).toFixed(2))}
-            className="flex-1 py-1 text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded border border-zinc-700 transition"
-          >
-            Used 50%
-          </button>
-        </div>
-
-        {/* Update Rate */}
-        <div className="border-t border-zinc-800 pt-4 mb-4">
-          <div className="flex items-center justify-between cursor-pointer group">
-            <label className="text-xs font-bold text-amber-500 uppercase flex items-center gap-2">
-              <Activity className="w-3 h-3" /> Update Usage Rate?
-            </label>
-          </div>
-          <div className="grid grid-cols-2 gap-2 mt-3">
-            <div className="relative">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-600 text-[10px] font-bold">
-                QTY
-              </span>
-              <input
-                type="number"
-                defaultValue={product.usage_freq_qty}
-                id="modal_rate_qty"
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2 pl-8 pr-2 text-sm text-white focus:border-amber-500"
-              />
+        {/* OPTION 1: QUICK LOG (Based on Prev Rate) */}
+        <button
+          onClick={() => handleConsume(usualAmount, false)}
+          disabled={submitting || usualAmount > product.quantity}
+          className="w-full group relative flex items-center justify-between bg-zinc-800 hover:bg-emerald-500/10 hover:border-emerald-500/50 border border-zinc-700 p-4 rounded-xl transition-all mb-6 text-left"
+        >
+          <div>
+            <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors flex items-center gap-2">
+              <Zap className="w-4 h-4 fill-current" />
+              Quick Log Usual
             </div>
-            <div>
-              <select
-                id="modal_rate_days"
-                defaultValue={product.usage_freq_days}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg py-2 px-2 text-sm text-white focus:border-amber-500"
+            <div className="text-xs text-zinc-500 mt-1">
+              Consume{" "}
+              <span className="text-zinc-300 font-mono">
+                {usualAmount} {product.unit}
+              </span>{" "}
+              (One-time)
+            </div>
+          </div>
+          <div className="h-8 w-8 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center group-hover:border-emerald-500 group-hover:bg-emerald-500 text-zinc-500 group-hover:text-black transition-all">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+        </button>
+
+        {/* DIVIDER */}
+        <div className="relative flex py-2 items-center mb-6">
+          <div className="flex-grow border-t border-zinc-800"></div>
+          <span className="flex-shrink-0 mx-4 text-xs font-bold text-zinc-600 uppercase">
+            Or Custom Amount
+          </span>
+          <div className="flex-grow border-t border-zinc-800"></div>
+        </div>
+
+        {/* OPTION 2: CUSTOM INPUT */}
+        <div className="space-y-4">
+          <div className="relative">
+            <input
+              type="number"
+              value={customAmount}
+              onChange={(e) => setCustomAmount(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-700 px-4 py-3 rounded-xl text-white focus:border-amber-500 outline-none text-lg font-mono placeholder:text-zinc-700"
+              placeholder="Enter custom qty..."
+            />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 text-xs font-bold uppercase">
+              {product.unit}
+            </span>
+          </div>
+
+          {/* CHECKBOX: Set as New Rate */}
+          {customAmount && (
+            <div
+              onClick={() => setIsPermanentUpdate(!isPermanentUpdate)}
+              className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                isPermanentUpdate
+                  ? "bg-amber-500/10 border-amber-500/30"
+                  : "bg-transparent border-transparent hover:bg-zinc-800"
+              }`}
+            >
+              <div
+                className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+                  isPermanentUpdate
+                    ? "bg-amber-500 border-amber-500 text-black"
+                    : "border-zinc-600 bg-transparent"
+                }`}
               >
-                <option value="1">Daily</option>
-                <option value="7">Weekly</option>
-                <option value="14">Bi-Weekly</option>
-                <option value="30">Monthly</option>
-              </select>
+                {isPermanentUpdate && <CheckCircle2 className="w-3.5 h-3.5" />}
+              </div>
+              <div>
+                <span
+                  className={`text-sm font-bold block ${
+                    isPermanentUpdate ? "text-amber-400" : "text-zinc-400"
+                  }`}
+                >
+                  Update default rate?
+                </span>
+                <p className="text-[10px] text-zinc-500 leading-tight mt-0.5">
+                  If checked,{" "}
+                  <b>
+                    {customAmount} {product.unit}
+                  </b>{" "}
+                  becomes your new usual consumption amount.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-end space-x-3 border-t border-zinc-800 pt-4">
+        {/* Footer Actions */}
+        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-zinc-800">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-zinc-800 text-zinc-300 rounded-xl hover:bg-zinc-700 transition font-medium text-sm"
+            className="px-4 py-2 text-zinc-400 hover:text-white text-sm font-medium transition"
           >
             Cancel
           </button>
           <button
-            onClick={handleConfirm}
+            onClick={() => handleConsume(customAmount, isPermanentUpdate)}
             disabled={
-              !consumeAmount || parseFloat(consumeAmount) > product.quantity
+              !customAmount ||
+              submitting ||
+              parseFloat(customAmount) > product.quantity
             }
-            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-xl font-bold transition text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-xl font-bold transition text-sm disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-500/20"
           >
-            Confirm
+            Confirm Log
           </button>
         </div>
       </div>

@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request # pyright: ignore[reportMissingImports]
 import json
 import os
 from database import get_db_connection

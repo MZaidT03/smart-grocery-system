@@ -28,7 +28,7 @@ def handle_profile(user_id):
                     "name": u['username'],        # DB: username -> Frontend: name
                     "email": u['email'],
                     "household_size": u['household_size'],
-                    "dietary_pref": u['diet_pref'] # DB: diet_pref -> Frontend: dietary_pref
+                    "dietary_pref": u['diet_preference'] # DB: diet_preference -> Frontend: dietary_pref
                 }
             })
         except Exception as e:

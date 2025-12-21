@@ -11,9 +11,10 @@ import LandingPage from "./components/LandingPage";
 import Analytics from "./components/Analytics";
 
 import ShoppingList from "./components/ShoppingList";
-import ProfilePage from "./components/ProfilePage";
+import ProfilePage from "./pages/ProfilePage";
 import Dashboard from "./pages/Dashboard";
 import RecipesPage from "./pages/RecipesPage";
+import MarketPrices from "./pages/MarketPrice";
 
 const ProtectedRoute = ({ children }) => {
   const user = localStorage.getItem("user");
@@ -49,6 +50,8 @@ const App = () => {
           }
         />
         <Route path="/shopping-list/:listId" element={<ShoppingList />} />
+        <Route path="/market-prices" element={<MarketPrices />} />
+
         <Route
           path="/profile"
           element={

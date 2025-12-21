@@ -1,5 +1,5 @@
 # routes/shopping.py
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify # pyright: ignore[reportMissingImports]
 from datetime import datetime
 from database import get_db_connection
 from utils import safe_float
