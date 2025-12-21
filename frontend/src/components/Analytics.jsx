@@ -16,8 +16,8 @@ import {
   Bar,
   Cell,
 } from "recharts";
-import { TrendingUp, Activity, Zap, PieChart } from "lucide-react";
-import Navbar from "../components/dashboard/Navbar";
+import { TrendingUp, Activity, Zap, PieChart, Sun } from "lucide-react"; // Import Sun icon
+import Navbar from "../components/dashboard/NavBar";
 
 const Analytics = () => {
   const [data, setData] = useState(null);
@@ -33,27 +33,6 @@ const Analytics = () => {
         );
         const json = await res.json();
         if (json.success) {
-          // --- MOCK DATA FOR DEMO (If backend doesn't send consumption counts yet) ---
-          // You can remove this block once backend 'consumption_trend' is real
-          if (!json.consumption_trend || json.consumption_trend.length === 0) {
-            json.consumption_trend = [
-              { month: "Jul", items: 12 },
-              { month: "Aug", items: 18 },
-              { month: "Sep", items: 25 },
-              { month: "Oct", items: 22 },
-              { month: "Nov", items: 30 },
-              { month: "Dec", items: 35 },
-            ];
-          }
-          if (!json.top_items || json.top_items.length === 0) {
-            json.top_items = [
-              { name: "Milk", count: 15 },
-              { name: "Eggs", count: 12 },
-              { name: "Bread", count: 10 },
-              { name: "Bananas", count: 8 },
-              { name: "Yogurt", count: 6 },
-            ];
-          }
           setData(json);
         }
       } catch (error) {
@@ -81,7 +60,7 @@ const Analytics = () => {
           <Activity className="text-amber-500" /> Consumption Analytics
         </h1>
 
-        {/* 1. SMART INSIGHTS (Prescriptive Analytics) */}
+        {/* 1. SMART INSIGHTS */}
         {data?.insights?.length > 0 && (
           <div className="bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/20 rounded-2xl p-6 mb-8">
             <h2 className="text-lg font-bold text-blue-400 mb-2 flex items-center gap-2">
@@ -102,7 +81,7 @@ const Analytics = () => {
         )}
 
         <div className="grid md:grid-cols-2 gap-8 mb-8">
-          {/* 2. CONSUMPTION VELOCITY (Time Series Analysis) */}
+          {/* 2. CONSUMPTION VELOCITY */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
             <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-emerald-400" /> Consumption
@@ -137,15 +116,46 @@ const Analytics = () => {
             </div>
           </div>
 
-          {/* 3. DIETARY CLUSTERING (Radar Chart) */}
+          {/* 3. SEASONAL TRENDS (NEW DS FEATURE) */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <Sun className="w-5 h-5 text-orange-400" /> Seasonal Trends
+            </h2>
+            <p className="text-xs text-zinc-500 mb-6">
+              Consumption intensity by season
+            </p>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data?.seasonal_trends || []}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+                  <XAxis dataKey="name" stroke="#71717a" fontSize={12} />
+                  <YAxis stroke="#71717a" fontSize={12} />
+                  <Tooltip
+                    cursor={{ fill: "#27272a" }}
+                    contentStyle={{
+                      backgroundColor: "#18181b",
+                      border: "1px solid #27272a",
+                    }}
+                  />
+                  <Bar
+                    dataKey="value"
+                    fill="#F97316"
+                    radius={[4, 4, 0, 0]}
+                    barSize={40}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-8 mb-8">
+          {/* 4. NUTRITIONAL CLUSTERING */}
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
             <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
               <PieChart className="w-5 h-5 text-purple-400" /> Nutritional
               Clustering
             </h2>
-            <p className="text-xs text-zinc-500 mb-4">
-              Inventory distribution by food group
-            </p>
             <div className="h-64 w-full flex items-center justify-center">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart
@@ -182,59 +192,59 @@ const Analytics = () => {
               </ResponsiveContainer>
             </div>
           </div>
-        </div>
 
-        {/* 4. FREQUENCY DISTRIBUTION (Bar Chart) */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
-          <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-amber-400" /> High-Frequency Items
-            (Top 5)
-          </h2>
-          <p className="text-xs text-zinc-500 mb-6">
-            Most frequently consumed products
-          </p>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data?.top_items || []} layout="vertical">
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="#27272a"
-                  horizontal={false}
-                />
-                <XAxis type="number" stroke="#71717a" fontSize={12} />
-                <YAxis
-                  dataKey="name"
-                  type="category"
-                  stroke="#fff"
-                  fontSize={12}
-                  width={100}
-                />
-                <Tooltip
-                  cursor={{ fill: "#27272a" }}
-                  contentStyle={{
-                    backgroundColor: "#18181b",
-                    border: "1px solid #27272a",
-                  }}
-                />
-                <Bar
-                  dataKey="count"
-                  fill="#F59E0B"
-                  radius={[0, 4, 4, 0]}
-                  barSize={24}
-                >
-                  {data?.top_items?.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={
-                        ["#F59E0B", "#EC4899", "#8B5CF6", "#3B82F6", "#10B981"][
-                          index % 5
-                        ]
-                      }
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          {/* 5. TOP ITEMS */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 shadow-xl">
+            <h2 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-amber-400" /> Top Consumed
+            </h2>
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data?.top_items || []} layout="vertical">
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#27272a"
+                    horizontal={false}
+                  />
+                  <XAxis type="number" stroke="#71717a" fontSize={12} />
+                  <YAxis
+                    dataKey="name"
+                    type="category"
+                    stroke="#fff"
+                    fontSize={12}
+                    width={100}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "#27272a" }}
+                    contentStyle={{
+                      backgroundColor: "#18181b",
+                      border: "1px solid #27272a",
+                    }}
+                  />
+                  <Bar
+                    dataKey="count"
+                    fill="#F59E0B"
+                    radius={[0, 4, 4, 0]}
+                    barSize={24}
+                  >
+                    {data?.top_items?.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={
+                          [
+                            "#F59E0B",
+                            "#EC4899",
+                            "#8B5CF6",
+                            "#3B82F6",
+                            "#10B981",
+                          ][index % 5]
+                        }
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
       </div>
