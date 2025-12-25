@@ -10,8 +10,15 @@ import {
   ShoppingBag,
   AlertCircle,
   Clock,
-  Filter, // Added Filter Icon
+  Filter,
 } from "lucide-react";
+
+import { 
+  isCountableUnit, 
+  normalizeQuantity, 
+  formatQuantity,
+  getQuantityStep 
+} from '../utils/quantityHelpers';
 
 const ShoppingList = () => {
   const { listId } = useParams();
@@ -21,8 +28,6 @@ const ShoppingList = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState(false);
-
-  // New Filter State
   const [showInStockOnly, setShowInStockOnly] = useState(false);
 
   // Manual Add State
@@ -40,7 +45,13 @@ const ShoppingList = () => {
       const data = await res.json();
       if (data.list) {
         setListMeta(data.list);
-        setItems(data.items);
+        // Normalize quantities on load
+        const normalizedItems = data.items.map(item => ({
+          ...item,
+          adjusted_quantity: normalizeQuantity(item.adjusted_quantity, item.unit),
+          final_quantity: normalizeQuantity(item.final_quantity, item.unit)
+        }));
+        setItems(normalizedItems);
       } else {
         alert("List not found");
         navigate("/dashboard");
@@ -52,22 +63,23 @@ const ShoppingList = () => {
     }
   };
 
-  // --- ACTIONS ---
-
   const handleUpdateItem = async (itemId, field, value) => {
-    // 1. Optimistic UI Update
+    const item = items.find(i => i.item_id === itemId);
+    const normalized = normalizeQuantity(value, item.unit);
+    
+    // Optimistic UI Update
     setItems((prev) =>
       prev.map((item) =>
-        item.item_id === itemId ? { ...item, [field]: value } : item
+        item.item_id === itemId ? { ...item, [field]: normalized } : item
       )
     );
 
-    // 2. API Call
+    // API Call
     try {
       await fetch(`http://127.0.0.1:5000/shopping-list/items/${itemId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
+        body: JSON.stringify({ [field]: normalized }),
       });
     } catch (error) {
       console.error("Update failed", error);
@@ -86,33 +98,30 @@ const ShoppingList = () => {
     }
   };
 
-  const handleAddItem = async (e) => {
+  const handleAddItem = (e) => {
     e.preventDefault();
     if (!newItemName) return;
 
-    try {
-      const res = await fetch(
-        `http://127.0.0.1:5000/shopping-list/${listId}/items`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            itemName: newItemName,
-            quantity: newItemQty,
-            unit: newItemUnit,
-            category: "Custom",
-          }),
-        }
-      );
+    const normalized = normalizeQuantity(newItemQty, newItemUnit);
 
+    fetch(`http://127.0.0.1:5000/shopping-list/${listId}/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itemName: newItemName,
+        quantity: normalized,
+        unit: newItemUnit,
+        category: "Custom",
+      }),
+    })
+    .then(res => {
       if (res.ok) {
         setNewItemName("");
         setNewItemQty(1);
         fetchListDetails();
       }
-    } catch (error) {
-      console.error("Add failed", error);
-    }
+    })
+    .catch(error => console.error("Add failed", error));
   };
 
   const handleConfirmList = async () => {
@@ -145,7 +154,6 @@ const ShoppingList = () => {
     );
   }
 
-  // Helper to get filtered items
   const filteredItems = items.filter((item) => {
     if (showInStockOnly) {
       return item.current_stock > 0;
@@ -186,10 +194,7 @@ const ShoppingList = () => {
 
       <div className="max-w-4xl mx-auto px-4 py-8">
         {/* ADD ITEM INPUT */}
-        <form
-          onSubmit={handleAddItem}
-          className="bg-zinc-900 p-2 rounded-xl border border-zinc-800 flex gap-2 mb-6 shadow-lg"
-        >
+        <div className="bg-zinc-900 p-2 rounded-xl border border-zinc-800 flex gap-2 mb-6 shadow-lg">
           <input
             type="text"
             placeholder="Add extra item (e.g., Dish Soap)"
@@ -199,30 +204,36 @@ const ShoppingList = () => {
           />
           <input
             type="number"
+            step={isCountableUnit(newItemUnit) ? "1" : "0.1"}
+            min={isCountableUnit(newItemUnit) ? "1" : "0.1"}
             value={newItemQty}
             onChange={(e) => setNewItemQty(e.target.value)}
             className="w-20 bg-zinc-950 border border-zinc-800 rounded-lg px-2 text-center text-white outline-none focus:border-amber-500"
           />
           <select
             value={newItemUnit}
-            onChange={(e) => setNewItemUnit(e.target.value)}
+            onChange={(e) => {
+              setNewItemUnit(e.target.value);
+              // Reset quantity to appropriate value for new unit
+              setNewItemQty(isCountableUnit(e.target.value) ? 1 : 0.5);
+            }}
             className="w-24 bg-zinc-950 border border-zinc-800 rounded-lg px-2 text-sm text-zinc-400 outline-none"
           >
             <option value="kg">kg</option>
             <option value="liters">L</option>
             <option value="dozen">doz</option>
-            <option value="pcs">pcs</option>
+            <option value="pieces">pcs</option>
             <option value="packet">pkt</option>
           </select>
           <button
-            type="submit"
+            onClick={handleAddItem}
             className="bg-zinc-800 hover:bg-zinc-700 text-amber-500 p-3 rounded-lg transition"
           >
             <Plus className="w-5 h-5" />
           </button>
-        </form>
+        </div>
 
-        {/* --- NEW FILTER TOGGLE SECTION --- */}
+        {/* FILTER TOGGLE */}
         <div className="flex items-center justify-between mb-4 px-1">
           <h2 className="text-zinc-400 text-sm font-medium uppercase tracking-wider flex items-center gap-2">
             Grocery Items
@@ -249,10 +260,11 @@ const ShoppingList = () => {
         {/* ITEMS LIST */}
         <div className="space-y-3">
           {filteredItems.map((item) => {
-            // Calculate Logic
             const perPerson = item.daily_consumption_per_person || 0;
             const totalCalc =
               perPerson * listMeta.num_members * listMeta.num_days;
+            const displayQty = formatQuantity(item.adjusted_quantity, item.unit);
+            const displayTotal = formatQuantity(totalCalc, item.unit);
 
             return (
               <div
@@ -271,15 +283,14 @@ const ShoppingList = () => {
                     )}
                   </div>
 
-                  {/* --- VISUAL FEEDBACK FOR CONSUMPTION RATE --- */}
                   {perPerson > 0 ? (
                     <div className="mt-2 flex items-center gap-2 text-xs text-amber-500/90 bg-amber-500/5 w-fit px-2 py-1 rounded border border-amber-500/10">
                       <Clock className="w-3 h-3" />
                       <span>
-                        {perPerson} {item.unit}/person × {listMeta.num_members}{" "}
+                        {formatQuantity(perPerson, item.unit)} {item.unit}/person × {listMeta.num_members}{" "}
                         ppl × {listMeta.num_days} days ≈{" "}
                         <strong>
-                          {totalCalc.toFixed(2)} {item.unit}
+                          {displayTotal} {item.unit}
                         </strong>
                       </span>
                     </div>
@@ -292,7 +303,7 @@ const ShoppingList = () => {
                   {item.current_stock > 0 && (
                     <p className="text-xs text-emerald-500/80 mt-1 flex items-center gap-1">
                       <Check className="w-3 h-3" /> You have{" "}
-                      {item.current_stock} {item.unit} at home
+                      {formatQuantity(item.current_stock, item.unit)} {item.unit} at home
                     </p>
                   )}
                 </div>
@@ -301,7 +312,9 @@ const ShoppingList = () => {
                   <div className="flex items-center bg-zinc-950 rounded-lg border border-zinc-800">
                     <input
                       type="number"
-                      value={item.adjusted_quantity}
+                      step={isCountableUnit(item.unit) ? "1" : "0.1"}
+                      min={isCountableUnit(item.unit) ? "1" : "0.1"}
+                      value={displayQty}
                       onChange={(e) =>
                         handleUpdateItem(
                           item.item_id,

@@ -16,6 +16,13 @@ import {
 } from "lucide-react";
 import { renderStockStatus } from "../../utils/formatters";
 
+import {
+  isCountableUnit,
+  normalizeQuantity,
+  formatQuantity,
+  getQuantityStep
+} from '../../utils/quantityHelpers';
+
 /* ---------------- HELPERS ---------------- */
 
 const getFrequencyLabel = (days) => {
@@ -389,6 +396,17 @@ const RestockModal = ({ product, onClose, onConfirm }) => {
           </div>
 
           <div>
+            <input
+              type="number"
+              step={getQuantityStep(product.consumption_unit)}
+              min={isCountableUnit(product.consumption_unit) ? "1" : "0.1"}
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 outline-none"
+            />
+          </div>
+
+          <div>
             <label className="text-xs text-zinc-400 uppercase font-semibold mb-1 block">
               Shelf Life (Days)
             </label>
@@ -486,10 +504,9 @@ const InventoryTable = ({
                 key={p.id}
                 onClick={() => handleRowClick(p)} // Row Click triggers detail view
                 className={`
-                  ${
-                    p.days_left <= 3
-                      ? "bg-red-500/5"
-                      : p.days_left <= 7
+                  ${p.days_left <= 3
+                    ? "bg-red-500/5"
+                    : p.days_left <= 7
                       ? "bg-amber-500/5"
                       : ""
                   }
@@ -506,7 +523,7 @@ const InventoryTable = ({
 
                 {/* STOCK */}
                 <td className="px-5 py-4 font-mono text-white">
-                  {p.quantity} {p.unit}
+                  {formatQuantity(p.quantity, p.unit)} {p.unit}
                 </td>
 
                 {/* USAGE */}

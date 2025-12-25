@@ -26,7 +26,7 @@ def register():
         # We try to insert into 'diet_pref', but if your DB is old it might fail.
         # This SQL assumes the column is 'diet_pref'.
         conn.execute("""
-            INSERT INTO users (username, password_hash, email, household_size, diet_pref) 
+            INSERT INTO users (username, password_hash, email, household_size, diet_preference) 
             VALUES (?, ?, ?, ?, ?)
         """, (username, hashed, email, int(household_size), diet_preference))
         conn.commit()
