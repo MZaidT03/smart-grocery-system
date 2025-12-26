@@ -28,14 +28,25 @@ def get_notifications():
     user_id = request.args.get('userId')
     conn = get_db_connection()
     try:
-        # Get last 10 notifications, newest first
+        # --- GROUPED QUERY ---
+        # This groups notifications by Title and Date.
+        # It calculates the 'count' of similar events.
         rows = conn.execute("""
-            SELECT * FROM notifications 
+            SELECT 
+                MAX(id) as id, 
+                title, 
+                MAX(message) as message, -- Shows the most recent message in the group
+                type, 
+                MIN(is_read) as is_read, -- If any in the group are unread, it shows as unread
+                MAX(created_at) as created_at,
+                COUNT(*) as count
+            FROM notifications 
             WHERE user_id = ? 
-            ORDER BY created_at DESC LIMIT 10
+            GROUP BY title, type, date(created_at) -- Group by Title + Day
+            ORDER BY created_at DESC
         """, (user_id,)).fetchall()
         
-        # Count unread
+        # Count total unread (raw count, not grouped)
         unread = conn.execute("SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0", (user_id,)).fetchone()[0]
         
         return jsonify({

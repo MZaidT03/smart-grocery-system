@@ -5,11 +5,17 @@ from utils import safe_float
 
 inventory_bp = Blueprint('inventory', __name__)
 
-# --- HELPER: ADD NOTIFICATION ---
-def log_notification(conn, user_id, title, message, type="info"):
+# --- HELPER: ADD NOTIFICATION (With optional backdating) ---
+def log_notification(conn, user_id, title, message, type="info", created_at=None):
     try:
-        conn.execute("INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)",
-                     (user_id, title, message, type))
+        if created_at:
+            # Backdate the notification
+            conn.execute("INSERT INTO notifications (user_id, title, message, type, created_at) VALUES (?, ?, ?, ?, ?)",
+                         (user_id, title, message, type, created_at))
+        else:
+            # Use current time
+            conn.execute("INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)",
+                         (user_id, title, message, type))
     except Exception as e:
         print(f"Notification Error: {e}")
 
@@ -51,53 +57,93 @@ def consume_fifo(conn, product_id, amount_needed):
             
     return amount_needed - amount_left_to_consume
 
-# --- AUTO CONSUMPTION LOGIC ---
+# --- ROBUST AUTO CONSUMPTION (CATCH-UP LOGIC) ---
 def apply_auto_consumption(user_id):
     conn = get_db_connection()
     try:
-        products = conn.execute("""
-            SELECT product_id, item_name, consumption_unit, current_quantity, usage_freq_qty, usage_freq_days, last_auto_check 
-            FROM products WHERE user_id = ? AND is_active = 1
-        """, (user_id,)).fetchall()
+        # 1. Find the last time the system successfully ran a daily check
+        # We look for a special 'System Check' notification to know the last processed date.
+        last_run_row = conn.execute("""
+            SELECT MAX(created_at) as last_date 
+            FROM notifications 
+            WHERE user_id = ? AND title = 'System Check'
+        """, (user_id,)).fetchone()
 
         now = datetime.now()
-        
-        for p in products:
-            last_check_str = p['last_auto_check']
-            if not last_check_str:
-                last_check = now
-            else:
-                try:
-                    last_check = datetime.strptime(str(last_check_str).split('.')[0], "%Y-%m-%d %H:%M:%S")
-                except ValueError:
-                    last_check = now
+        today_date = now.date()
 
-            delta = now - last_check
-            days_passed = delta.days
+        if last_run_row and last_run_row['last_date']:
+            # Parse DB date (handle potential format differences)
+            try:
+                last_run_str = str(last_run_row['last_date']).split(' ')[0] # Get YYYY-MM-DD
+                last_run_date = datetime.strptime(last_run_str, '%Y-%m-%d').date()
+            except:
+                last_run_date = today_date - timedelta(days=1)
+        else:
+            # If never run before, assume yesterday was done (start fresh today)
+            last_run_date = today_date - timedelta(days=1)
 
-            if days_passed >= 1:
+        # 2. Identify the first missing day (The day AFTER the last run)
+        current_processing_date = last_run_date + timedelta(days=1)
+
+        # 3. Loop: Process EVERY missing day until we reach Today
+        while current_processing_date <= today_date:
+            print(f"--- Processing Catch-Up for {current_processing_date} ---")
+            
+            products = conn.execute("""
+                SELECT product_id, item_name, consumption_unit, current_quantity, usage_freq_qty, usage_freq_days 
+                FROM products WHERE user_id = ? AND is_active = 1
+            """, (user_id,)).fetchall()
+
+            daily_logs = []
+
+            for p in products:
+                # Calculate Daily Rate
                 if p['usage_freq_days'] > 0:
                     daily_rate = p['usage_freq_qty'] / p['usage_freq_days']
                 else:
                     daily_rate = 0
 
-                consumed_amount = daily_rate * days_passed
-
-                if consumed_amount > 0 and p['current_quantity'] > 0:
-                    actual_consumption = consume_fifo(conn, p['product_id'], consumed_amount)
+                # Consume for exactly ONE day
+                if daily_rate > 0 and p['current_quantity'] > 0:
+                    actual_consumed = consume_fifo(conn, p['product_id'], daily_rate)
                     
-                    if actual_consumption > 0:
+                    if actual_consumed > 0:
                         sync_product_total(conn, p['product_id'])
-                        conn.execute("UPDATE products SET last_auto_check = ? WHERE product_id = ?", (now, p['product_id']))
-                        conn.execute("INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) VALUES (?, ?, ?, date('now'))", (p['product_id'], user_id, actual_consumption))
+                        
+                        # Log Consumption with PAST DATE (Backdating)
+                        conn.execute("""
+                            INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) 
+                            VALUES (?, ?, ?, ?)
+                        """, (p['product_id'], user_id, actual_consumed, current_processing_date))
+                        
+                        # Update Summary
                         conn.execute("""
                             INSERT INTO consumption_summary (product_id, user_id, summary_date, total_consumed)
-                            VALUES (?, ?, date('now'), ?, ?)
+                            VALUES (?, ?, ?, ?)
                             ON CONFLICT(product_id, summary_date) DO UPDATE SET total_consumed = total_consumed + excluded.total_consumed
-                        """, (p['product_id'], user_id, actual_consumption))
-                        
-                        msg = f"Automatically consumed {round(actual_consumption, 2)} {p['consumption_unit']} of {p['item_name']}"
-                        log_notification(conn, user_id, "Auto Consumption", msg, "info")
+                        """, (p['product_id'], user_id, current_processing_date, actual_consumed))
+
+                        daily_logs.append(f"{round(actual_consumed, 2)} {p['consumption_unit']} of {p['item_name']}")
+
+            # 4. Create Notification for THIS specific past day
+            # We set the time to 09:00 AM of that day so grouping works nicely
+            past_timestamp = f"{current_processing_date.strftime('%Y-%m-%d')} 09:00:00"
+            
+            if daily_logs:
+                if len(daily_logs) > 2:
+                    msg = f"Automatically consumed {len(daily_logs)} items including {daily_logs[0]}..."
+                else:
+                    msg = "Automatically consumed " + ", ".join(daily_logs)
+                
+                log_notification(conn, user_id, "Auto Consumption", msg, "info", past_timestamp)
+
+            # 5. Mark this day as processed using a hidden 'System Check' notification
+            # This ensures we don't process this day again.
+            log_notification(conn, user_id, "System Check", "Daily processing complete", "system", past_timestamp)
+            
+            # Move to next day
+            current_processing_date += timedelta(days=1)
 
         conn.commit()
     except Exception as e:
@@ -113,7 +159,11 @@ def manage_products():
     
     if request.method == 'GET':
         uid = request.args.get("userId")
-        if uid: apply_auto_consumption(uid) 
+        
+        # --- TRIGGER: Check logic whenever user loads dashboard ---
+        if uid: 
+            apply_auto_consumption(uid) 
+        # --------------------------------------------------------
 
         try:
             # JOIN with Batches to get Next Expiry
@@ -146,8 +196,6 @@ def manage_products():
                 elif historical_rate > 0: effective_rate = historical_rate
                 else: effective_rate = manual_daily_rate
 
-                # --- FIX: DAYS LEFT CALCULATION ---
-                # If rate > 0, calculate real days left. If rate is 0, return -1 (Unknown).
                 if effective_rate > 0:
                     d['days_left'] = round(d['quantity'] / effective_rate, 1)
                 else:
@@ -156,7 +204,6 @@ def manage_products():
                 d['effective_daily_rate'] = effective_rate
                 d['price'] = safe_float(d.get('price'), 0)
 
-                # --- EXPIRY LOGIC ---
                 d['expiry_days'] = 999 
                 if d['next_expiry']:
                     try:
@@ -164,7 +211,7 @@ def manage_products():
                         delta = (exp_date - now_date).days
                         d['expiry_days'] = delta
                     except:
-                        pass # Keep 999 if parse fails
+                        pass 
 
                 results.append(d)
 
@@ -172,6 +219,8 @@ def manage_products():
         finally:
             conn.close()
 
+    # ... (Keep the rest of your routes: POST, PUT, DELETE same as before) ...
+    # Be sure to include the POST, PUT, DELETE methods from previous response here
     if request.method == 'POST':
         d = request.json
         freq_qty = safe_float(d.get('usageQty', 1))
@@ -181,7 +230,6 @@ def manage_products():
         expiry_date = (datetime.now() + timedelta(days=shelf_life_days)).strftime('%Y-%m-%d')
         
         try:
-            # 1. UPSERT Main Product
             cursor = conn.execute("""
                 INSERT INTO products (user_id, item_name, consumption_unit, current_quantity, initial_quantity, category, usage_freq_qty, usage_freq_days, price)
                 VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?)
@@ -197,15 +245,10 @@ def manage_products():
             else: pid = conn.execute("SELECT product_id FROM products WHERE user_id=? AND item_name=? AND consumption_unit=?", 
                                     (d['userId'], d['name'], d['unit'])).fetchone()['product_id']
 
-            # 2. Insert Batch
             conn.execute("INSERT INTO product_batches (product_id, quantity, expiry_date) VALUES (?, ?, ?)", (pid, d['quantity'], expiry_date))
-            
-            # 3. Sync & Log
             sync_product_total(conn, pid)
             if price > 0: conn.execute("INSERT INTO price_history (item_name, price, date) VALUES (?, ?, date('now'))", (d['name'], price))
-            
             log_notification(conn, d['userId'], "Stock Added", f"Added {d['quantity']} {d['unit']} of {d['name']} (Exp: {expiry_date})", "success")
-
             conn.commit()
             return jsonify({"success": True})
         except Exception as e:
@@ -213,7 +256,6 @@ def manage_products():
         finally:
             conn.close()
 
-# --- UPDATE PRICE ---
 @inventory_bp.route('/products/<int:pid>/price', methods=['PUT'])
 def update_price(pid):
     d = request.json
@@ -230,142 +272,39 @@ def update_price(pid):
     finally:
         conn.close()
 
-
-# --- RESTOCK PRODUCT (UPDATED WITH WEIGHTED AVERAGE) ---
 @inventory_bp.route('/products/<int:pid>/restock', methods=['POST', 'OPTIONS'])
 def restock_product(pid):
     if request.method == 'OPTIONS':
         return jsonify({'success': True}), 200
-
     data = request.json
     user_id = data.get('userId')
-    
     conn = get_db_connection()
     try:
-        # 1. Fetch Current Product State (Quantity & Current Unit Price)
         product = conn.execute("SELECT item_name, consumption_unit, current_quantity, price FROM products WHERE product_id = ?", (pid,)).fetchone()
-        if not product:
-            return jsonify({'error': 'Product not found'}), 404
-
+        if not product: return jsonify({'error': 'Product not found'}), 404
         current_qty = safe_float(product['current_quantity'], 0)
         current_unit_price = safe_float(product['price'], 0)
-
-        # 2. Extract Restock Data
         added_qty = safe_float(data.get('added_quantity', 0))
-        restock_unit_price = safe_float(data.get('new_price', 0)) # Price per unit of the NEW batch
-        
-        # Default Expiry logic
+        restock_unit_price = safe_float(data.get('new_price', 0))
         expiry_input = data.get('new_expiry_days')
         expiry_days = safe_float(expiry_input, 999) if expiry_input else 999
         new_expiry_date = (datetime.now() + timedelta(days=expiry_days)).strftime('%Y-%m-%d')
-
-        # 3. Calculate Weighted Average Price
-        # Formula: (Old Total Value + New Batch Value) / Total Quantity
         old_total_value = current_qty * current_unit_price
         new_batch_value = added_qty * restock_unit_price
-        
         new_total_qty = current_qty + added_qty
-        
         if new_total_qty > 0:
-            final_weighted_price = (old_total_value + new_batch_value) / new_total_qty
-            # Round to 2 decimal places for currency
-            final_weighted_price = round(final_weighted_price, 2)
+            final_weighted_price = round((old_total_value + new_batch_value) / new_total_qty, 2)
         else:
             final_weighted_price = restock_unit_price
-
-        # 4. Insert New Batch
-        conn.execute("INSERT INTO product_batches (product_id, quantity, expiry_date) VALUES (?, ?, ?)", 
-                     (pid, added_qty, new_expiry_date))
-        
-        # 5. Update Product with NEW WEIGHTED PRICE
-        conn.execute("""
-            UPDATE products 
-            SET price = ?, updated_at = CURRENT_TIMESTAMP 
-            WHERE product_id = ?
-        """, (final_weighted_price, pid))
-
-        # 6. Log Price History (Optional: You might want to log the Restock Price or the New Avg)
-        # Here we log the New Average Price so the graph stays consistent with the main table
-        conn.execute("INSERT INTO price_history (item_name, price, date) VALUES (?, ?, date('now'))", 
-                     (product['item_name'], final_weighted_price))
-
-        # 7. Sync Total Quantity
+        conn.execute("INSERT INTO product_batches (product_id, quantity, expiry_date) VALUES (?, ?, ?)", (pid, added_qty, new_expiry_date))
+        conn.execute("UPDATE products SET price = ?, updated_at = CURRENT_TIMESTAMP WHERE product_id = ?", (final_weighted_price, pid))
+        conn.execute("INSERT INTO price_history (item_name, price, date) VALUES (?, ?, date('now'))", (product['item_name'], final_weighted_price))
         sync_product_total(conn, pid)
-
-        # 8. Notification
         msg = f"Restocked {added_qty} {product['consumption_unit']} of {product['item_name']} @ Rs {restock_unit_price}"
-        if user_id:
-            log_notification(conn, user_id, "Stock Refilled", msg, "success")
-
+        if user_id: log_notification(conn, user_id, "Stock Refilled", msg, "success")
         conn.commit()
-        
-        # Return new values
         new_total = conn.execute("SELECT current_quantity FROM products WHERE product_id=?", (pid,)).fetchone()['current_quantity']
-        
-        return jsonify({
-            'success': True, 
-            'message': 'Restocked successfully', 
-            'new_quantity': new_total,
-            'new_avg_price': final_weighted_price
-        })
-
-    except Exception as e:
-        conn.rollback()
-        print(f"Restock Error: {e}")
-        return jsonify({'error': str(e)}), 500
-    finally:
-        conn.close()
-    if request.method == 'OPTIONS':
-        return jsonify({'success': True}), 200
-
-    data = request.json
-    user_id = data.get('userId')
-    
-    conn = get_db_connection()
-    try:
-        # 1. Fetch Product Basic Info
-        product = conn.execute("SELECT item_name, consumption_unit FROM products WHERE product_id = ?", (pid,)).fetchone()
-        if not product:
-            return jsonify({'error': 'Product not found'}), 404
-
-        # 2. Extract Data
-        added_qty = safe_float(data.get('added_quantity', 0))
-        new_price = safe_float(data.get('new_price', 0))
-        # Default to 999 if not provided or 0, unless specifically meant to be 0 (usually not for restock)
-        expiry_input = data.get('new_expiry_days')
-        expiry_days = safe_float(expiry_input, 999) if expiry_input else 999
-        
-        # Calculate new expiry date. If 999, we can just set a far future date or handle logically.
-        # Here we just add days to now.
-        new_expiry_date = (datetime.now() + timedelta(days=expiry_days)).strftime('%Y-%m-%d')
-
-        # 3. Insert New Batch
-        conn.execute("INSERT INTO product_batches (product_id, quantity, expiry_date) VALUES (?, ?, ?)", 
-                     (pid, added_qty, new_expiry_date))
-        
-        # 4. Update Product Price (if changed and > 0)
-        if new_price > 0:
-            conn.execute("UPDATE products SET price = ?, updated_at = CURRENT_TIMESTAMP WHERE product_id = ?", (new_price, pid))
-            # Log Price History
-            conn.execute("INSERT INTO price_history (item_name, price, date) VALUES (?, ?, date('now'))", (product['item_name'], new_price))
-        else:
-             conn.execute("UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE product_id = ?", (pid,))
-
-        # 5. Sync Total Quantity
-        sync_product_total(conn, pid)
-
-        # 6. Notification
-        msg = f"Restocked {added_qty} {product['consumption_unit']} of {product['item_name']}"
-        if user_id:
-            log_notification(conn, user_id, "Stock Refilled", msg, "success")
-
-        conn.commit()
-        
-        # Return new quantity for frontend update
-        new_total = conn.execute("SELECT current_quantity FROM products WHERE product_id=?", (pid,)).fetchone()['current_quantity']
-        
-        return jsonify({'success': True, 'message': 'Restocked successfully', 'new_quantity': new_total})
-
+        return jsonify({'success': True, 'message': 'Restocked successfully', 'new_quantity': new_total, 'new_avg_price': final_weighted_price})
     except Exception as e:
         conn.rollback()
         print(f"Restock Error: {e}")
@@ -373,7 +312,6 @@ def restock_product(pid):
     finally:
         conn.close()
 
-# --- DELETE PRODUCT ---
 @inventory_bp.route('/products/<int:pid>', methods=['DELETE'])
 def delete_product_by_id(pid):
     conn = get_db_connection()
@@ -386,7 +324,6 @@ def delete_product_by_id(pid):
     finally:
         conn.close()
 
-# --- MANUAL CONSUME ---
 @inventory_bp.route('/consume', methods=['POST'])
 def consume():
     d = request.json
@@ -400,22 +337,16 @@ def consume():
         new_days_rate = d.get('newRateDays')
         if new_qty_rate is not None and new_days_rate is not None:
              conn.execute("UPDATE products SET usage_freq_qty = ?, usage_freq_days = ? WHERE product_id = ?", (new_qty_rate, new_days_rate, pid))
-
         actual_consumed = consume_fifo(conn, pid, amount)
         sync_product_total(conn, pid)
-        conn.execute("UPDATE products SET last_auto_check = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE product_id = ?", (pid,))
-        
+        conn.execute("UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE product_id = ?", (pid,))
         conn.execute("INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) VALUES (?, ?, ?, date('now'))", (pid, user_id, actual_consumed))
         conn.execute("""
-            INSERT INTO consumption_summary (product_id, user_id, summary_date, total_consumed, avg_consumption_rate)
-            VALUES (?, ?, date('now'), ?, ?)
-            ON CONFLICT(product_id, summary_date) DO UPDATE SET 
-            total_consumed = total_consumed + excluded.total_consumed,
-            avg_consumption_rate = (total_consumed + excluded.total_consumed)
-        """, (pid, user_id, actual_consumed, actual_consumed))
-        
+            INSERT INTO consumption_summary (product_id, user_id, summary_date, total_consumed)
+            VALUES (?, ?, date('now'), ?)
+            ON CONFLICT(product_id, summary_date) DO UPDATE SET total_consumed = total_consumed + excluded.total_consumed
+        """, (pid, user_id, actual_consumed))
         if prod: log_notification(conn, user_id, "Manual Consumption", f"Consumed {actual_consumed} {prod['consumption_unit']} of {prod['item_name']}", "info")
-
         conn.commit()
         return jsonify({"success": True})
     except Exception as e:
@@ -433,48 +364,30 @@ def get_catalog():
     finally:
         conn.close()
 
-# --- GET BATCH DETAILS ---
 @inventory_bp.route('/products/<int:pid>/batches', methods=['GET'])
 def get_product_batches(pid):
     conn = get_db_connection()
     try:
-        # Fetch all active batches for this product, sorted by expiry
-        batches = conn.execute("""
-            SELECT batch_id, quantity, expiry_date 
-            FROM product_batches 
-            WHERE product_id = ? AND quantity > 0
-            ORDER BY expiry_date ASC
-        """, (pid,)).fetchall()
-        
+        batches = conn.execute("SELECT batch_id, quantity, expiry_date FROM product_batches WHERE product_id = ? AND quantity > 0 ORDER BY expiry_date ASC", (pid,)).fetchall()
         return jsonify([dict(b) for b in batches])
     finally:
         conn.close()
     
-# --- UPDATE SPECIFIC BATCH (Fix Wrong Entry) ---
 @inventory_bp.route('/batches/<int:batch_id>', methods=['PUT'])
 def update_batch(batch_id):
     data = request.json
-    
     conn = get_db_connection()
     try:
-        # We allow updating expiry_days (which calculates date) OR quantity
         new_days = data.get('days')
-        
         if new_days is not None:
             new_days = float(new_days)
             new_expiry_date = (datetime.now() + timedelta(days=new_days)).strftime('%Y-%m-%d')
             conn.execute("UPDATE product_batches SET expiry_date = ? WHERE batch_id = ?", (new_expiry_date, batch_id))
-            
-        # Optional: If you want to allow fixing quantity mistakes too
         new_qty = data.get('quantity')
         if new_qty is not None:
             conn.execute("UPDATE product_batches SET quantity = ? WHERE batch_id = ?", (float(new_qty), batch_id))
-            # Note: If you change quantity, you should ideally sync the main product total after this.
-            # Fetch product_id to sync total
             row = conn.execute("SELECT product_id FROM product_batches WHERE batch_id=?", (batch_id,)).fetchone()
-            if row:
-                sync_product_total(conn, row['product_id'])
-
+            if row: sync_product_total(conn, row['product_id'])
         conn.commit()
         return jsonify({"success": True})
     except Exception as e:
@@ -483,36 +396,20 @@ def update_batch(batch_id):
     finally:
         conn.close()
 
-# --- UPDATE EXPIRY ROUTE ---
 @inventory_bp.route('/products/<int:pid>/expiry', methods=['PUT'])
 def update_expiry(pid):
     data = request.json
     days = safe_float(data.get('days'), 7)
-    
     conn = get_db_connection()
     try:
         new_expiry_date = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
-        
-        # 1. Check if batches exist
         batch_count = conn.execute("SELECT COUNT(*) FROM product_batches WHERE product_id = ?", (pid,)).fetchone()[0]
-        
         if batch_count > 0:
-            # Case A: Batches exist -> Update them
-            conn.execute("""
-                UPDATE product_batches 
-                SET expiry_date = ? 
-                WHERE product_id = ? AND quantity > 0
-            """, (new_expiry_date, pid))
+            conn.execute("UPDATE product_batches SET expiry_date = ? WHERE product_id = ? AND quantity > 0", (new_expiry_date, pid))
         else:
-            # Case B: No batches (Legacy Item) -> Create a batch from 'current_quantity'
-            # First, get the total quantity from the main table
             prod = conn.execute("SELECT current_quantity FROM products WHERE product_id = ?", (pid,)).fetchone()
             if prod and prod['current_quantity'] > 0:
-                conn.execute("""
-                    INSERT INTO product_batches (product_id, quantity, expiry_date)
-                    VALUES (?, ?, ?)
-                """, (pid, prod['current_quantity'], new_expiry_date))
-
+                conn.execute("INSERT INTO product_batches (product_id, quantity, expiry_date) VALUES (?, ?, ?)", (pid, prod['current_quantity'], new_expiry_date))
         conn.commit()
         return jsonify({"success": True})
     except Exception as e:
