@@ -2,12 +2,10 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   ShoppingCart,
   BarChart3,
-  LogOut,
   User,
   Bell,
-  Check,
-  X,
   Layers,
+  ArrowRight,
 } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
 
@@ -20,18 +18,14 @@ const Navbar = ({ user }) => {
 
   const userId = localStorage.getItem("userId");
 
-  // Fetch Notifications on Load
   useEffect(() => {
     if (userId) fetchNotifications();
-
-    // Optional: Poll every 30 seconds
     const interval = setInterval(() => {
       if (userId) fetchNotifications();
     }, 30000);
     return () => clearInterval(interval);
   }, [userId]);
 
-  // Click Outside to Close
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (notifRef.current && !notifRef.current.contains(event.target)) {
@@ -78,15 +72,9 @@ const Navbar = ({ user }) => {
     setShowNotifs(!showNotifs);
   };
 
-  const handleLogout = () => {
-    localStorage.clear();
-    navigate("/login");
-  };
-
   return (
     <nav className="bg-zinc-950/80 backdrop-blur-md border-b border-zinc-900 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-        {/* LOGO */}
         <Link to="/dashboard" className="flex items-center space-x-3 group">
           <ShoppingCart className="w-8 h-8 text-amber-400 group-hover:scale-110 transition-transform" />
           <span className="text-2xl font-bold bg-gradient-to-r from-amber-200 via-amber-400 to-amber-600 bg-clip-text text-transparent">
@@ -102,13 +90,13 @@ const Navbar = ({ user }) => {
           >
             <Layers className="w-5 h-5" />
           </Link>
-          {/* ANALYTICS */}
           <Link
             to="/analytics"
             className="p-2 text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10 rounded-xl transition border border-transparent hover:border-amber-500/20"
           >
             <BarChart3 className="w-5 h-5" />
           </Link>
+
           {/* --- NOTIFICATIONS DROPDOWN --- */}
           <div className="relative" ref={notifRef}>
             <button
@@ -125,10 +113,10 @@ const Navbar = ({ user }) => {
               <div className="absolute right-0 mt-3 w-80 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
                 <div className="p-3 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/50">
                   <h3 className="text-sm font-bold text-white">
-                    Notifications
+                    Recent Updates
                   </h3>
                   <span className="text-[10px] text-zinc-500">
-                    {notifications.length} Recent
+                    {notifications.length} found
                   </span>
                 </div>
 
@@ -138,7 +126,7 @@ const Navbar = ({ user }) => {
                       No notifications yet
                     </div>
                   ) : (
-                    notifications.map((n) => (
+                    notifications.slice(0, 5).map((n) => (
                       <div
                         key={n.id}
                         className={`p-4 border-b border-zinc-800/50 hover:bg-zinc-800/30 transition ${
@@ -154,10 +142,20 @@ const Navbar = ({ user }) => {
                             }`}
                           ></div>
                           <div>
-                            <p className="text-sm font-bold text-zinc-200">
-                              {n.title}
-                            </p>
-                            <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-bold text-zinc-200">
+                                {n.title}
+                              </p>
+
+                              {/* --- NEW: COUNT BADGE --- */}
+                              {n.count > 1 && (
+                                <span className="bg-zinc-800 text-zinc-400 text-[9px] font-bold px-1.5 py-0.5 rounded-full border border-zinc-700">
+                                  x{n.count}
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed line-clamp-2">
                               {n.message}
                             </p>
                             <span className="text-[10px] text-zinc-600 mt-2 block">
@@ -172,10 +170,18 @@ const Navbar = ({ user }) => {
                     ))
                   )}
                 </div>
+
+                <Link
+                  to="/notifications"
+                  onClick={() => setShowNotifs(false)}
+                  className="block p-3 text-center text-xs font-bold text-amber-500 hover:text-amber-400 bg-zinc-950/80 hover:bg-zinc-900 border-t border-zinc-800 transition flex items-center justify-center gap-2"
+                >
+                  View All Notifications <ArrowRight className="w-3 h-3" />
+                </Link>
               </div>
             )}
           </div>
-          {/* PROFILE BADGE */}
+
           <Link
             to="/profile"
             className="hidden sm:flex items-center px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 rounded-xl border border-zinc-800 transition group select-none decoration-transparent"

@@ -6,10 +6,7 @@ import { Package, ListPlus, ChefHat, DollarSign } from "lucide-react";
 import Navbar from "../components/dashboard/NavBar";
 import AddProductForm from "../components/dashboard/AddProductForm";
 import InventoryTable from "../components/dashboard/InventoryTable";
-import GenerateListModal from "../components/dashboard/GenerateListModal";
 import ConsumeModal from "../components/dashboard/ConsumeModal";
-
-// REMOVED: RestockModal import (now handled inside InventoryTable)
 
 const Dashboard = () => {
   const [products, setProducts] = useState([]);
@@ -18,10 +15,7 @@ const Dashboard = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
 
   // Modal States
-  const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [showConsumeModal, setShowConsumeModal] = useState(false);
-
-  // REMOVED: showRestockModal state
 
   const navigate = useNavigate();
   const user = localStorage.getItem("user");
@@ -116,10 +110,9 @@ const Dashboard = () => {
     setShowConsumeModal(true);
   };
 
-  // NEW: Handle the Restock Submission from the InventoryTable
+  // Handle the Restock Submission from the InventoryTable
   const handleRestockSubmit = async (productId, data) => {
     try {
-      // The data object contains { added_quantity, new_price, new_expiry_days }
       const res = await fetch(
         `http://127.0.0.1:5000/products/${productId}/restock`,
         {
@@ -130,7 +123,7 @@ const Dashboard = () => {
       );
 
       if (res.ok) {
-        fetchProducts(); // Refresh to show new stock/expiry
+        fetchProducts();
       } else {
         console.error("Restock failed");
       }
@@ -172,7 +165,7 @@ const Dashboard = () => {
             </button>
 
             <button
-              onClick={() => setShowGenerateModal(true)}
+              onClick={() => navigate("/shopping-list")}
               className="flex items-center px-5 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold rounded-xl shadow-lg shadow-amber-500/20 transition-all transform hover:scale-[1.02]"
             >
               <ListPlus className="w-5 h-5 mr-2" /> Shopping List
@@ -186,7 +179,6 @@ const Dashboard = () => {
           onAddProduct={handleAddProduct}
         />
 
-        {/* Updated Table: Passed handleRestockSubmit instead of onRestockClick */}
         <InventoryTable
           products={products}
           householdSize={householdSize}
@@ -197,17 +189,6 @@ const Dashboard = () => {
           onRefresh={fetchProducts}
         />
       </div>
-
-      {showGenerateModal && (
-        <GenerateListModal
-          userId={userId}
-          onClose={() => setShowGenerateModal(false)}
-          onGenerateSuccess={(listId) => {
-            setShowGenerateModal(false);
-            navigate(`/shopping-list/${listId}`);
-          }}
-        />
-      )}
 
       {showConsumeModal && selectedProduct && (
         <ConsumeModal

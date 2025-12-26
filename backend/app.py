@@ -14,7 +14,9 @@ from routes.notifications import notifications_bp
 
 app = Flask(__name__)
 
-# --- FIX: ALLOW BOTH LOCALHOST AND 127.0.0.1 ---
+# --- CORS CONFIGURATION ---
+# We removed the generic 'CORS(app)' line to prevent conflicts.
+# This block handles everything:
 CORS(app, resources={
     r"/*": {
         "origins": ["http://localhost:5173", "http://127.0.0.1:5173"], 
