@@ -2,6 +2,7 @@ from flask import Flask, send_from_directory
 from flask_cors import CORS
 import os
 
+
 # Import Routes
 from routes.auth import auth_bp
 from routes.inventory import inventory_bp
@@ -15,22 +16,17 @@ from routes.notifications import notifications_bp
 app = Flask(__name__)
 
 # --- CORS CONFIGURATION ---
-# We removed the generic 'CORS(app)' line to prevent conflicts.
-# This block handles everything:
-CORS(app, resources={
-    r"/*": {
-        "origins": ["http://localhost:5173", "http://127.0.0.1:5173"], 
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-}, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(inventory_bp)
 app.register_blueprint(shopping_bp)
 app.register_blueprint(recipes_bp)
 app.register_blueprint(analytics_bp)
-app.register_blueprint(admin_bp)
+
+# --- FIX: Added url_prefix='/admin' ---
+app.register_blueprint(admin_bp, url_prefix='/admin') 
+
 app.register_blueprint(user_bp)
 app.register_blueprint(notifications_bp)
 

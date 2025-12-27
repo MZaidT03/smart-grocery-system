@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import Navbar from "../components/dashboard/NavBar";
 import { useNavigate, useParams } from "react-router-dom";
+import { sanitizeQuantity } from "../utils/mathUtils";
 
 const ShoppingList = () => {
   const [items, setItems] = useState([]);
@@ -193,7 +194,6 @@ const ShoppingList = () => {
     }
     setLoading(false);
   };
-
   const handleAddItem = async (e) => {
     e.preventDefault();
     if (!newItemName || !listId) return;
@@ -205,7 +205,10 @@ const ShoppingList = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             itemName: newItemName,
-            quantity: newItemQty,
+
+            // --- CHANGE THIS LINE ---
+            quantity: sanitizeQuantity(newItemQty, newItemUnit),
+
             unit: newItemUnit,
             category: newItemCategory,
             usageQty: newItemUsageQty,
@@ -668,6 +671,11 @@ const CheckoutModal = ({ items, userId, listId, onClose, onComplete }) => {
 
   const handleConfirm = async () => {
     setIsSubmitting(true);
+    const processedItems = confirmItems.map((item) => ({
+      ...item,
+
+      qty: sanitizeQuantity(item.qty, item.unit),
+    }));
     try {
       const res = await fetch(
         `http://127.0.0.1:5000/shopping-list/${listId}/confirm`,
