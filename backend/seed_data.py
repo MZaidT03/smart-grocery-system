@@ -7,7 +7,7 @@ import os
 # Ensure we can import utils
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 try:
-    from utils import hash_password
+    from backend.utils import hash_password
 except ImportError:
     # Fallback if utils.py isn't found/configured yet
     import hashlib

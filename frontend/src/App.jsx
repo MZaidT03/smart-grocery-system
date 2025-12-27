@@ -17,6 +17,7 @@ import RecipesPage from "./pages/RecipesPage";
 import MarketPrices from "./pages/MarketPrice";
 import InventoryReport from "./pages/InventoryReport";
 import NotificationsPage from "./pages/NotificationsPage";
+import AdminDashboard from "./pages/AdminDashboard";
 
 const ProtectedRoute = ({ children }) => {
   const user = localStorage.getItem("user");
@@ -54,6 +55,7 @@ const App = () => {
         <Route path="/market-prices" element={<MarketPrices />} />
         <Route path="/inventory-report" element={<InventoryReport />} />{" "}
         <Route path="/notifications" element={<NotificationsPage />} />
+        <Route path="/admin" element={<AdminDashboard />} />
         <Route
           path="/profile"
           element={
