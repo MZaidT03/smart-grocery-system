@@ -20,6 +20,7 @@ import {
   Search,
 } from "lucide-react";
 import Navbar from "../components/dashboard/NavBar";
+import SmartSuggestions from "./SmartSuggestions";
 import { useNavigate, useParams } from "react-router-dom";
 import { sanitizeQuantity } from "../utils/mathUtils";
 
@@ -51,6 +52,9 @@ const ShoppingList = () => {
   const [newItemCategory, setNewItemCategory] = useState("Staples");
   const [newItemUsageQty, setNewItemUsageQty] = useState(1);
   const [newItemUsagePeriod, setNewItemUsagePeriod] = useState("7");
+
+  // --- SMART SUGGESTIONS STATE ---
+  const [lastAddedItem, setLastAddedItem] = useState(null); // <--- NEW STATE
 
   // Autocomplete State
   const [suggestions, setSuggestions] = useState([]);
@@ -154,7 +158,6 @@ const ShoppingList = () => {
     setNewItemUnit(item.consumption_unit);
     setNewItemCategory(item.category);
 
-    // Auto-calculate usage guess based on household size if available
     const estimatedQty = item.daily_consumption_per_person
       ? Math.ceil(
           item.daily_consumption_per_person * userProfile.household_size * 7
@@ -162,7 +165,7 @@ const ShoppingList = () => {
       : 1;
 
     setNewItemUsageQty(estimatedQty);
-    setNewItemUsagePeriod("7"); // Default to weekly
+    setNewItemUsagePeriod("7");
 
     setShowSuggestions(false);
   };
@@ -177,14 +180,45 @@ const ShoppingList = () => {
         dietType: userProfile.diet_preference,
         useExistingStock: mode === "stock",
       };
+
       const res = await fetch(`http://127.0.0.1:5000/shopping-list/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
+
       if (data.success) {
         setListId(data.listId);
+
+        // Frontend Sanitization
+        const listRes = await fetch(
+          `http://127.0.0.1:5000/shopping-list/${data.listId}`
+        );
+        const listData = await listRes.json();
+
+        if (listData.success && listData.items.length > 0) {
+          const updates = listData.items
+            .map((item) => {
+              const rawQty = item.adjusted_quantity;
+              const cleanQty = sanitizeQuantity(rawQty, item.consumption_unit);
+              if (rawQty !== cleanQty) {
+                return fetch(
+                  `http://127.0.0.1:5000/shopping-list/items/${item.item_id}`,
+                  {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ adjustedQuantity: cleanQty }),
+                  }
+                );
+              }
+              return null;
+            })
+            .filter(Boolean);
+
+          if (updates.length > 0) await Promise.all(updates);
+        }
+
         fetchList(data.listId);
       } else {
         alert("Generation failed: " + data.message);
@@ -194,6 +228,7 @@ const ShoppingList = () => {
     }
     setLoading(false);
   };
+
   const handleAddItem = async (e) => {
     e.preventDefault();
     if (!newItemName || !listId) return;
@@ -205,10 +240,7 @@ const ShoppingList = () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             itemName: newItemName,
-
-            // --- CHANGE THIS LINE ---
             quantity: sanitizeQuantity(newItemQty, newItemUnit),
-
             unit: newItemUnit,
             category: newItemCategory,
             usageQty: newItemUsageQty,
@@ -217,12 +249,53 @@ const ShoppingList = () => {
         }
       );
       if (res.ok) {
+        // --- NEW: Trigger Suggestions ---
+        setLastAddedItem(newItemName);
+
         setNewItemName("");
         setNewItemQty(1);
         fetchList(listId);
       }
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  // --- NEW: Handle Clicking a Suggestion ---
+  const handleAddSuggestion = async (suggestedName) => {
+    // 1. Try to find item details in master catalog for better data
+    const catalogItem = catalog.find(
+      (c) => c.item_name.toLowerCase() === suggestedName.toLowerCase()
+    );
+
+    // 2. Defaults
+    const category = catalogItem ? catalogItem.category : "Staples";
+    const unit = catalogItem ? catalogItem.consumption_unit : "kg";
+    const qty = 1;
+
+    try {
+      const res = await fetch(
+        `http://127.0.0.1:5000/shopping-list/${listId}/items`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            itemName: suggestedName,
+            quantity: qty,
+            unit: unit,
+            category: category,
+            usageQty: 1,
+            usagePeriod: "7",
+          }),
+        }
+      );
+      if (res.ok) {
+        fetchList(listId);
+        // Chain reaction: Adding 'Jam' might suggest 'Butter' next!
+        setLastAddedItem(suggestedName);
+      }
+    } catch (error) {
+      console.error("Failed to add suggestion", error);
     }
   };
 
@@ -253,9 +326,6 @@ const ShoppingList = () => {
   const getCheckedItemsForModal = () =>
     items.filter((item) => checkedItems[item.item_id]);
   const checkedCount = Object.values(checkedItems).filter(Boolean).length;
-  const filteredItems = items.filter((item) =>
-    showInStockOnly ? item.current_stock > 0 : true
-  );
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans pb-32">
@@ -275,6 +345,7 @@ const ShoppingList = () => {
         {/* --- GENERATOR SECTION --- */}
         {!listId && (
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 mb-8 shadow-xl">
+            {/* ... (Kept same as provided code) ... */}
             <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <Download className="w-5 h-5 text-amber-500" /> Create New List
             </h2>
@@ -352,12 +423,12 @@ const ShoppingList = () => {
         {/* --- ACTIVE LIST VIEW --- */}
         {listId && (
           <div className="max-w-5xl mx-auto">
-            {/* --- MANUAL ADD BAR (WITH AUTOCOMPLETE) --- */}
+            {/* --- MANUAL ADD BAR --- */}
             <form
               onSubmit={handleAddItem}
-              className="bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex flex-wrap md:flex-nowrap gap-3 mb-6 shadow-lg items-center relative z-20"
+              className="bg-zinc-900 p-3 rounded-xl border border-zinc-800 flex flex-wrap md:flex-nowrap gap-3 mb-2 shadow-lg items-center relative z-20"
             >
-              {/* Name + Autocomplete */}
+              {/* ... (Kept existing inputs same) ... */}
               <div className="flex-[2] min-w-[200px] relative" ref={wrapperRef}>
                 <div className="relative">
                   <Search className="absolute left-3 top-3 w-4 h-4 text-zinc-500" />
@@ -370,7 +441,6 @@ const ShoppingList = () => {
                     autoComplete="off"
                   />
                 </div>
-                {/* Suggestions Dropdown */}
                 {showSuggestions && (
                   <div className="absolute top-full left-0 right-0 mt-2 bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl max-h-60 overflow-y-auto z-50">
                     {suggestions.map((s, i) => (
@@ -392,7 +462,6 @@ const ShoppingList = () => {
                 )}
               </div>
 
-              {/* Category */}
               <div className="flex-1 min-w-[120px]">
                 <select
                   value={newItemCategory}
@@ -407,7 +476,6 @@ const ShoppingList = () => {
                 </select>
               </div>
 
-              {/* Quantity */}
               <div className="flex items-center gap-2 flex-1 min-w-[140px] bg-zinc-950 rounded-lg px-2 border border-zinc-800">
                 <input
                   type="number"
@@ -427,7 +495,6 @@ const ShoppingList = () => {
                 </select>
               </div>
 
-              {/* Consumption */}
               <div className="flex items-center gap-2 flex-[1.5] min-w-[180px] bg-zinc-950 rounded-lg px-2 border border-zinc-800">
                 <span className="text-[10px] text-zinc-500 uppercase font-bold whitespace-nowrap">
                   Use:
@@ -457,6 +524,15 @@ const ShoppingList = () => {
                 <Plus className="w-5 h-5" />
               </button>
             </form>
+
+            {/* --- NEW: SMART SUGGESTIONS COMPONENT --- */}
+            <div className="mb-6">
+              <SmartSuggestions
+                triggerItem={lastAddedItem}
+                onAdd={handleAddSuggestion}
+              />
+            </div>
+            {/* -------------------------------------- */}
 
             {/* Filter Toggle */}
             <div className="flex justify-end mb-4">
@@ -637,11 +713,10 @@ const CheckoutModal = ({ items, userId, listId, onClose, onComplete }) => {
   const [confirmItems, setConfirmItems] = useState(
     items.map((i) => ({
       ...i,
-      qty: i.adjusted_quantity,
+      qty: sanitizeQuantity(i.adjusted_quantity, i.unit),
       name: i.item_name,
       price: "",
       shelfLife: getDefaultShelfLife(i.category),
-      // Default usage to what we estimated or 1/week
       usageQty: i.daily_consumption_per_person
         ? (i.daily_consumption_per_person * 7).toFixed(1)
         : 1,
@@ -671,18 +746,19 @@ const CheckoutModal = ({ items, userId, listId, onClose, onComplete }) => {
 
   const handleConfirm = async () => {
     setIsSubmitting(true);
+
     const processedItems = confirmItems.map((item) => ({
       ...item,
-
       qty: sanitizeQuantity(item.qty, item.unit),
     }));
+
     try {
       const res = await fetch(
         `http://127.0.0.1:5000/shopping-list/${listId}/confirm`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ items: confirmItems }),
+          body: JSON.stringify({ items: processedItems }),
         }
       );
       const data = await res.json();
@@ -776,7 +852,7 @@ const CheckoutModal = ({ items, userId, listId, onClose, onComplete }) => {
                 />
               </div>
 
-              {/* 5. Consumption Rate (FIX) */}
+              {/* 5. Consumption Rate */}
               <div className="col-span-3 flex gap-1">
                 <div className="relative flex-1">
                   <span className="absolute left-1 top-2 text-[9px] text-zinc-600 uppercase">

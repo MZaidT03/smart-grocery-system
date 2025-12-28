@@ -1,22 +1,38 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Trash2,
   Search,
   Eye,
   X,
-  Calendar,
   Package,
-  Activity,
   DollarSign,
-  Clock,
   RefreshCcw,
   History,
   AlertCircle,
   Pencil,
 } from "lucide-react";
 import { renderStockStatus } from "../../utils/formatters";
+import { sanitizeQuantity } from "../../utils/mathUtils";
 
 /* ---------------- HELPERS ---------------- */
+
+// 1. Quantity Formatter (Integers stay integers, floats get 2 decimals)
+const formatQty = (value) => {
+  const num = parseFloat(value);
+  if (isNaN(num)) return "0";
+  return num % 1 === 0 ? num : num.toFixed(2);
+};
+
+// 2. NEW: Price Formatter (Fixes the "e-14" scientific notation bug)
+const formatPrice = (value) => {
+  const num = parseFloat(value);
+  if (isNaN(num)) return "0.00";
+
+  // If the number is extremely small (scientific notation), treat as 0
+  if (num < 0.01 && num > -0.01) return "0.00";
+
+  return num.toFixed(2); // Always show "10.50", "3.00", etc.
+};
 
 const getFrequencyLabel = (days) => {
   if (days === 1) return "day";
@@ -49,19 +65,9 @@ const renderExpiryStatus = (days) => {
   );
 };
 
-// Helper to format date string nicely
-const formatDate = (dateStr) => {
-  if (!dateStr) return "N/A";
-  return new Date(dateStr).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-};
-
 /* ---------------- MODALS ---------------- */
 
-// 1. PRODUCT DETAILS MODAL (View Full Info + Batch History)
+// 1. EDIT BATCH MODAL
 const EditBatchModal = ({ batch, onClose, onUpdate }) => {
   const [days, setDays] = useState("");
 
@@ -111,15 +117,12 @@ const EditBatchModal = ({ batch, onClose, onUpdate }) => {
   );
 };
 
-// 2. PRODUCT DETAILS MODAL (View Full Info + Batch History)
+// 2. PRODUCT DETAILS MODAL
 const ProductDetailsModal = ({ product, onClose }) => {
   const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // State for editing a specific batch
   const [editingBatch, setEditingBatch] = useState(null);
 
-  // Fetch batches when modal mounts or product changes
   useEffect(() => {
     if (product?.id) {
       fetchBatches();
@@ -149,7 +152,6 @@ const ProductDetailsModal = ({ product, onClose }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ days: newDays }),
       });
-      // Refresh the list after update
       fetchBatches();
     } catch (e) {
       console.error(e);
@@ -161,7 +163,6 @@ const ProductDetailsModal = ({ product, onClose }) => {
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm">
       <div className="bg-zinc-900 w-full max-w-lg rounded-xl border border-zinc-800 shadow-2xl flex flex-col max-h-[90vh]">
-        {/* Header */}
         <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-950/50 rounded-t-xl shrink-0">
           <div>
             <h3 className="text-xl font-bold text-white flex items-center gap-2">
@@ -179,16 +180,14 @@ const ProductDetailsModal = ({ product, onClose }) => {
           </button>
         </div>
 
-        {/* Scrollable Body */}
         <div className="p-6 space-y-6 overflow-y-auto custom-scrollbar">
-          {/* Stats Grid (Keep existing stats code here...) */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-zinc-950 p-4 rounded-lg border border-zinc-800/50">
               <div className="flex items-center gap-2 mb-2 text-zinc-400 text-sm uppercase font-semibold">
                 <Package className="w-4 h-4" /> Total Stock
               </div>
               <div className="text-2xl font-mono text-white">
-                {product.quantity}{" "}
+                {formatQty(product.quantity)}{" "}
                 <span className="text-sm">{product.unit}</span>
               </div>
               <div className="mt-2">
@@ -201,15 +200,13 @@ const ProductDetailsModal = ({ product, onClose }) => {
                 <DollarSign className="w-4 h-4" /> Current Price
               </div>
               <div className="text-2xl font-mono text-emerald-400">
-                Rs {product.price ?? 0}
+                {/* --- APPLIED PRICE FORMATTER --- */}
+                Rs {formatPrice(product.price)}
               </div>
               <div className="text-xs text-zinc-500 mt-1">Per unit</div>
             </div>
           </div>
 
-          {/* General Info (Keep existing...) */}
-
-          {/* --- Batch History Section --- */}
           <div>
             <h4 className="text-sm font-bold text-zinc-300 mb-3 flex items-center gap-2 uppercase tracking-wide">
               <History className="w-4 h-4 text-amber-500" /> Stock Batches
@@ -257,7 +254,7 @@ const ProductDetailsModal = ({ product, onClose }) => {
                             {batch.expiry_date}
                           </td>
                           <td className="px-4 py-3 text-right font-mono text-white">
-                            {batch.quantity}
+                            {formatQty(batch.quantity)}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {isExpired ? (
@@ -271,7 +268,6 @@ const ProductDetailsModal = ({ product, onClose }) => {
                             )}
                           </td>
                           <td className="px-4 py-3 text-right">
-                            {/* --- EDIT BUTTON --- */}
                             <button
                               onClick={() => setEditingBatch(batch)}
                               className="p-1.5 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white transition"
@@ -302,7 +298,7 @@ const ProductDetailsModal = ({ product, onClose }) => {
                 This item is expiring soon! If you don't use it, you will lose
                 approximately{" "}
                 <span className="text-white font-bold">
-                  Rs {(product.price * product.quantity).toFixed(0)}
+                  Rs {formatPrice(product.price * product.quantity)}
                 </span>
                 .
               </p>
@@ -310,7 +306,6 @@ const ProductDetailsModal = ({ product, onClose }) => {
           </div>
         )}
 
-        {/* Footer */}
         <div className="p-4 border-t border-zinc-800 bg-zinc-950/30 flex justify-end shrink-0">
           <button
             onClick={onClose}
@@ -320,7 +315,6 @@ const ProductDetailsModal = ({ product, onClose }) => {
           </button>
         </div>
 
-        {/* Render Edit Batch Modal if Active */}
         {editingBatch && (
           <EditBatchModal
             batch={editingBatch}
@@ -333,7 +327,7 @@ const ProductDetailsModal = ({ product, onClose }) => {
   );
 };
 
-// 2. RESTOCK MODAL (Includes Shelf Life)
+// 3. INTERNAL RESTOCK MODAL
 const RestockModal = ({ product, onClose, onConfirm }) => {
   const [qty, setQty] = useState(1);
   const [price, setPrice] = useState(product.price || 0);
@@ -341,10 +335,24 @@ const RestockModal = ({ product, onClose, onConfirm }) => {
     product.expiry_days === 999 ? "" : product.expiry_days
   );
 
+  const safeUnit = useMemo(() => {
+    const raw =
+      product.unit || product.consumption_unit || product.measure || "";
+    return raw.toLowerCase().trim();
+  }, [product]);
+
+  const finalAmount = useMemo(() => {
+    if (!qty) return 0;
+    return sanitizeQuantity(qty, safeUnit);
+  }, [qty, safeUnit]);
+
+  const isIntegerMode =
+    finalAmount !== parseFloat(qty || 0) && parseFloat(qty) > 0;
+
   const handleSubmit = (e) => {
     e.preventDefault();
     onConfirm(product.id, {
-      added_quantity: parseFloat(qty),
+      added_quantity: finalAmount,
       new_price: parseFloat(price),
       new_expiry_days: expiryDays ? parseInt(expiryDays) : 999,
     });
@@ -362,7 +370,7 @@ const RestockModal = ({ product, onClose, onConfirm }) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-xs text-zinc-400 uppercase font-semibold mb-1 block">
-              Quantity to Add ({product.unit})
+              Quantity to Add ({safeUnit})
             </label>
             <input
               type="number"
@@ -374,6 +382,28 @@ const RestockModal = ({ product, onClose, onConfirm }) => {
               className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-white focus:border-emerald-500 outline-none"
             />
           </div>
+
+          {qty > 0 && (
+            <div
+              className={`text-center text-xs py-2 rounded-lg border ${
+                isIntegerMode
+                  ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                  : "bg-zinc-800 border-zinc-700 text-zinc-400"
+              }`}
+            >
+              {isIntegerMode ? (
+                <>
+                  Integer Logic Active <br />
+                  Raw: {qty} &rarr; <strong>Will Add: {finalAmount}</strong>
+                </>
+              ) : (
+                <>
+                  Exact Amount Mode <br />
+                  Will Add: <strong>{qty}</strong> {safeUnit}
+                </>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="text-xs text-zinc-400 uppercase font-semibold mb-1 block">
@@ -435,8 +465,6 @@ const InventoryTable = ({
   onDeleteClick,
 }) => {
   const [search, setSearch] = useState("");
-
-  // State for Modals
   const [viewProduct, setViewProduct] = useState(null);
   const [restockProduct, setRestockProduct] = useState(null);
 
@@ -446,7 +474,6 @@ const InventoryTable = ({
       p.category.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Handle Opening View Modal
   const handleRowClick = (product) => {
     setViewProduct(product);
   };
@@ -484,7 +511,7 @@ const InventoryTable = ({
             {filtered.map((p) => (
               <tr
                 key={p.id}
-                onClick={() => handleRowClick(p)} // Row Click triggers detail view
+                onClick={() => handleRowClick(p)}
                 className={`
                   ${
                     p.days_left <= 3
@@ -496,7 +523,6 @@ const InventoryTable = ({
                   hover:bg-zinc-800/50 transition cursor-pointer group
                 `}
               >
-                {/* ITEM */}
                 <td className="px-5 py-4">
                   <div className="font-semibold text-white group-hover:text-blue-400 transition-colors">
                     {p.name}
@@ -504,38 +530,33 @@ const InventoryTable = ({
                   <div className="text-xs text-zinc-400">{p.category}</div>
                 </td>
 
-                {/* STOCK */}
                 <td className="px-5 py-4 font-mono text-white">
-                  {p.quantity} {p.unit}
+                  {formatQty(p.quantity)} {p.unit}
                 </td>
 
-                {/* USAGE */}
                 <td className="px-5 py-4 text-zinc-300">
                   {p.usage_freq_qty} {p.unit} /{" "}
                   {getFrequencyLabel(p.usage_freq_days)}
                 </td>
 
-                {/* PRICE */}
                 <td className="px-5 py-4 text-emerald-400 font-mono">
-                  Rs {p.price ?? "—"}
+                  {/* --- APPLIED PRICE FORMATTER HERE --- */}
+                  Rs {formatPrice(p.price)}
                 </td>
 
-                {/* STATUS */}
                 <td className="px-5 py-4">
                   {renderStockStatus(p.days_left, p.quantity)}
                   {renderExpiryStatus(p.expiry_days)}
                 </td>
 
-                {/* ACTIONS */}
                 <td className="px-5 py-4 text-right">
                   <div
                     className="flex justify-end gap-2"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {/* View Details Button (Explicit) */}
                     <button
                       onClick={(e) => {
-                        e.stopPropagation(); // Prevent row click
+                        e.stopPropagation();
                         setViewProduct(p);
                       }}
                       className="p-2 bg-zinc-800 hover:bg-zinc-700 rounded-md text-zinc-300"
@@ -581,7 +602,6 @@ const InventoryTable = ({
         </table>
       </div>
 
-      {/* Render Modals */}
       {viewProduct && (
         <ProductDetailsModal
           product={viewProduct}
@@ -594,7 +614,6 @@ const InventoryTable = ({
           product={restockProduct}
           onClose={() => setRestockProduct(null)}
           onConfirm={(id, data) => {
-            // Pass data up to parent
             onRestockSubmit(id, data);
           }}
         />
