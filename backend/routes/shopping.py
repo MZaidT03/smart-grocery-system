@@ -2,10 +2,34 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 from database import get_db_connection
 from utils import safe_float
+from services.recommendation import get_market_basket_recommendations
 
 shopping_bp = Blueprint('shopping', __name__)
 
-# --- HELPERS ---
+# --- HELPER: AUTO-LEARN TO CATALOG (MISSING IN YOUR CODE) ---
+def update_master_catalog(conn, name, category, unit):
+    """
+    Silently adds a new item to the global autocomplete catalog 
+    if it doesn't exist yet, using SAFE DEFAULTS.
+    """
+    try:
+        conn.execute("""
+            INSERT INTO product_catalog (
+                item_name, 
+                category, 
+                consumption_unit, 
+                daily_consumption_per_person, 
+                diet_type, 
+                default_shelf_life, 
+                default_usage_freq_days
+            )
+            SELECT ?, ?, ?, 0.1, 'Non-Vegan', 14, 7
+            WHERE NOT EXISTS (SELECT 1 FROM product_catalog WHERE item_name = ?)
+        """, (name, category, unit, name))
+    except Exception as e:
+        print(f"⚠️ Catalog Auto-Update Failed: {e}")
+
+# --- OTHER HELPERS ---
 
 def generate_shopping_list_logic(data):
     user_id = data.get("userId")
@@ -157,8 +181,15 @@ def add_item_to_list(list_id):
             cat = ci['category']
             unit = ci['consumption_unit']
         
-        # NOTE: We aren't storing usage in shopping_list_items table, but the frontend sends it during confirm. 
-        # Ideally, we should trust the confirm step.
+        # 👇👇👇 THIS WILL NOW WORK BECAUSE WE DEFINED IT ABOVE 👇👇👇
+        update_master_catalog(
+            conn, 
+            data['itemName'], 
+            data.get('category', 'Other'), 
+            data.get('unit', 'pcs')
+        )
+        # 👆👆👆 ----------------------------------------------- 👆👆👆
+
         conn.execute("INSERT INTO shopping_list_items (list_id, item_name, consumption_unit, suggested_quantity, adjusted_quantity, category) VALUES (?, ?, ?, ?, ?, ?)", (list_id, name, unit, qty, qty, cat))
         conn.commit()
         return jsonify({"success": True})
@@ -265,3 +296,15 @@ def confirm_list(list_id):
         return jsonify({"success": False, "message": str(e)}), 500
     finally:
         conn.close()
+
+@shopping_bp.route('/shopping/suggest', methods=['GET'])
+def suggest_items():
+    """
+    Returns AI suggestions based on the item provided in '?item=Bread'
+    """
+    item_name = request.args.get('item')
+    if not item_name:
+        return jsonify([])
+
+    suggestions = get_market_basket_recommendations(item_name)
+    return jsonify(suggestions)
