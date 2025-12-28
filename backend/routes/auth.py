@@ -26,7 +26,7 @@ def register():
         # We try to insert into 'diet_pref', but if your DB is old it might fail.
         # This SQL assumes the column is 'diet_pref'.
         conn.execute("""
-            INSERT INTO users (username, password_hash, email, household_size, diet_pref) 
+            INSERT INTO users (username, password_hash, email, household_size, diet_preference) 
             VALUES (?, ?, ?, ?, ?)
         """, (username, hashed, email, int(household_size), diet_preference))
         conn.commit()
@@ -121,7 +121,7 @@ def handle_profile(user_id):
             # If your DB uses 'diet_preference', you might need to change this query manually.
             conn.execute("""
                 UPDATE users 
-                SET username = ?, household_size = ?, diet_pref = ? 
+                SET username = ?, household_size = ?, diet_preference = ? 
                 WHERE user_id = ?
             """, (data.get('name'), data.get('household_size'), data.get('dietary_pref'), user_id))
             
