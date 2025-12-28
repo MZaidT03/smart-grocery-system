@@ -1,12 +1,13 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, request, jsonify
 from database import get_db_connection
-from datetime import datetime
+from services.analytics import get_consumption_forecast, detect_anomaly
+from services.scraper import update_market_prices
 
 analytics_bp = Blueprint('analytics', __name__)
 
 # --- HELPER: Inferred Diet Logic (For Inventory Report) ---
 def infer_diet_type(category):
-    category = category.capitalize()
+    category = (category or "").capitalize()
     if category in ["Meat", "Fish", "Seafood"]: return "Non-Veg"
     if category in ["Dairy", "Eggs", "Honey"]: return "Vegetarian"
     return "Vegan" # Fruits, Veg, Grains, Staples
@@ -20,13 +21,16 @@ def get_season(month_num):
     if m in [5, 6, 7, 8, 9]: return "Summer"
     return "Autumn" # 10, 11
 
+# ---------------------------------------------------------
+# ROUTE 1: INVENTORY REPORT (ABC Analysis & Tree Map)
+# ---------------------------------------------------------
 @analytics_bp.route('/analytics/inventory-report', methods=['GET'])
 def get_inventory_report():
     """
     Returns data for the Smart Inventory Report Page:
-    1. ABC Analysis (Class A/B/C)
-    2. Tree Map Data (Category Value)
-    3. Diet Clusters
+    1. ABC Analysis (Class A/B/C) based on Stock Value.
+    2. Tree Map Data (Visualizing value by category).
+    3. Diet Clusters.
     """
     user_id = request.args.get('userId')
     if not user_id:
@@ -52,6 +56,7 @@ def get_inventory_report():
             })
 
         # --- DS LOGIC 1: ABC ANALYSIS ---
+        # Formula: Value = Price * Quantity
         for p in products_list:
             p['stockValue'] = (p['price'] or 0) * (p['quantity'] or 0)
 
@@ -66,14 +71,15 @@ def get_inventory_report():
             accumulated += p['stockValue']
             pct = (accumulated / total_val) * 100 if total_val > 0 else 0
             
-            if pct <= 75: grade = 'A'
-            elif pct <= 95: grade = 'B'
-            else: grade = 'C'
+            # Pareto Principle (80/15/5 rule simplified to 75/95/100)
+            if pct <= 75: grade = 'A'      # High Value
+            elif pct <= 95: grade = 'B'    # Medium Value
+            else: grade = 'C'              # Low Value
             
             p['grade'] = grade
             abc_data.append(p)
 
-        # --- DS LOGIC 2: TREE MAP ---
+        # --- DS LOGIC 2: TREE MAP PREP ---
         cat_map = {}
         for p in products_list:
             c = p['category'] or "Other"
@@ -104,24 +110,24 @@ def get_inventory_report():
     finally:
         conn.close()
 
-
+# ---------------------------------------------------------
+# ROUTE 2: MAIN DASHBOARD ANALYTICS
+# ---------------------------------------------------------
 @analytics_bp.route('/analytics/dashboard', methods=['GET'])
 def get_analytics():
     """
     Returns data for the Main Analytics Dashboard:
     1. Consumption Trend (Line Chart)
-    2. Seasonal Trends (Bar Chart) - NEW
+    2. Seasonal Trends (Bar Chart)
     3. Top Items (Bar Chart)
     4. Diet Composition (Radar Chart)
-    5. Insights Text
+    5. AI Insights Text
     """
     user_id = request.args.get('userId')
     conn = get_db_connection()
 
     try:
-        # ---------------------------------------------------------
-        # 1. CONSUMPTION VELOCITY (Time Series)
-        # ---------------------------------------------------------
+        # 1. CONSUMPTION VELOCITY
         trend_query = """
             SELECT strftime('%m', consumption_date) as month_num, 
                    COUNT(*) as usage_count 
@@ -137,30 +143,25 @@ def get_analytics():
                      "09":"Sep", "10":"Oct", "11":"Nov", "12":"Dec"}
         
         consumption_trend = []
-        
-        # --- NEW: SEASONAL AGGREGATION BUCKETS ---
         seasons = {"Winter": 0, "Spring": 0, "Summer": 0, "Autumn": 0}
 
         for row in trend_rows:
             m_key = row['month_num']
             count = row['usage_count']
 
-            # Add to Consumption Trend
+            # Line Chart Data
             consumption_trend.append({
                 "month": month_map.get(m_key, m_key),
                 "items": count
             })
 
-            # Add to Seasonal Bucket
+            # Seasonal Bucket Logic
             s_name = get_season(m_key)
             seasons[s_name] += count
         
-        # Format for Bar Chart (Remove empty seasons if preferred, or keep all)
         seasonal_trends = [{"name": k, "value": v} for k, v in seasons.items() if v > 0]
 
-        # ---------------------------------------------------------
         # 2. TOP ITEMS (Pareto)
-        # ---------------------------------------------------------
         top_query = """
             SELECT p.item_name, COUNT(cl.log_id) as freq
             FROM consumption_logs cl
@@ -173,9 +174,7 @@ def get_analytics():
         top_rows = conn.execute(top_query, (user_id,)).fetchall()
         top_items = [{"name": row['item_name'], "count": row['freq']} for row in top_rows]
 
-        # ---------------------------------------------------------
-        # 3. DIETARY COMPOSITION (Cluster)
-        # ---------------------------------------------------------
+        # 3. DIETARY COMPOSITION (Radar)
         inventory = conn.execute("SELECT category, current_quantity FROM products WHERE user_id = ?", (user_id,)).fetchall()
         
         macros = {"Proteins": 0, "Carbs": 0, "Fats": 0, "Vitamins": 0, "Junk": 0}
@@ -194,22 +193,16 @@ def get_analytics():
             {"subject": k, "A": v, "fullMark": 100} for k, v in macros.items() if v > 0
         ]
 
-        # ---------------------------------------------------------
         # 4. SMART INSIGHTS ENGINE
-        # ---------------------------------------------------------
         insights = []
-        
-        # Insight: Seasonal
         if seasonal_trends:
             top_season = max(seasonal_trends, key=lambda x: x['value'])
             insights.append(f"📅 Seasonal Analysis: Your peak consumption is in {top_season['name']}.")
-
-        # Insight: Most Used
+        
         if top_items:
             most_used = top_items[0]['name']
             insights.append(f"🔥 Most consumed item: '{most_used}'. Recommendation: Buy in bulk.")
         
-        # Insight: Health
         total_stock = sum(macros.values())
         if total_stock > 0:
             junk_pct = (macros['Junk'] / total_stock)
@@ -219,7 +212,7 @@ def get_analytics():
         return jsonify({
             "success": True,
             "consumption_trend": consumption_trend,
-            "seasonal_trends": seasonal_trends, # <--- NEW FIELD
+            "seasonal_trends": seasonal_trends,
             "top_items": top_items,
             "dietaryComposition": radar_data,
             "insights": insights
@@ -230,3 +223,93 @@ def get_analytics():
         return jsonify({"success": False, "message": str(e)}), 500
     finally:
         conn.close()
+
+# ---------------------------------------------------------
+# ROUTE 3: PREDICTIVE FORECAST (ARIMA/WMA)
+# ---------------------------------------------------------
+# In backend/routes/analytics.py
+
+@analytics_bp.route('/analytics/forecast/<int:product_id>', methods=['GET'])
+def product_forecast(product_id):
+    conn = get_db_connection()
+    try:
+        # 1. Fetch Logs (Using correct column names)
+        logs = conn.execute("""
+            SELECT date(consumption_date) as date, SUM(consumed_quantity) as quantity 
+            FROM consumption_logs 
+            WHERE product_id = ? 
+            GROUP BY date(consumption_date)
+            ORDER BY date(consumption_date) ASC
+        """, (product_id,)).fetchall()
+
+        log_data = [{'date': row['date'], 'quantity': row['quantity']} for row in logs]
+
+        # 2. Run New DS Engine
+        forecast = get_consumption_forecast(log_data)
+        
+        # 3. Fetch Product
+        product = conn.execute("SELECT item_name, current_quantity, consumption_unit FROM products WHERE product_id = ?", (product_id,)).fetchone()
+        
+        if not product:
+            return jsonify({"success": False, "message": "Product not found"}), 404
+
+        current_stock = product['current_quantity']
+        
+        # Default values
+        wma_usage = 0
+        seasonal_points = []
+        
+        if forecast:
+            wma_usage = forecast['wma_daily_usage']
+            seasonal_points = forecast['seasonal_prediction']
+
+        # Calc days left based on WMA (safer for run-out dates)
+        days_left = 999
+        if wma_usage > 0:
+            days_left = current_stock / wma_usage
+
+        return jsonify({
+            "success": True,
+            "product": {
+                "id": product_id,
+                "name": product['item_name'],
+                "unit": product['consumption_unit'],
+                "stock": current_stock
+            },
+            "history": log_data,
+            "forecast": {
+                "daily_usage": wma_usage,         # Single number for flat line
+                "seasonal_points": seasonal_points, # List of 7 numbers for wavy line
+                "method": forecast['method'] if forecast else "No Data"
+            },
+            "smart_days_left": round(days_left, 1)
+        })
+
+    except Exception as e:
+        print(f"Forecast Error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        conn.close()
+# In backend/routes/analytics.py
+
+@analytics_bp.route('/analytics/fetch-live-prices', methods=['POST'])
+def fetch_live_prices():
+    try:
+        # 1. Get User ID from the request
+        # The frontend uses POST, but doesn't send a body yet. 
+        # We can grab it from query params OR defaults.
+        # Ideally, update frontend to send JSON body: { userId: 123 }
+        
+        data = request.get_json() or {}
+        user_id = data.get('userId') 
+        
+        # 2. Call scraper with specific User ID
+        count = update_market_prices(user_id=user_id)
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Successfully updated prices for {count} items."
+        })
+    except Exception as e:
+        print(f"Scraper Error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500

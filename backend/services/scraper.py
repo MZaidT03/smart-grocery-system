@@ -12,111 +12,18 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_NAME = os.path.join(BASE_DIR, "grocery.db")
 
 # -------------------------------
-# AL-FATAH SHOPIFY SEARCH API
+# AL-FATAH SEARCH API
 # -------------------------------
 SEARCH_API = "https://alfatah.pk/search/suggest.json"
-
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
 }
 
-# -------------------------------
-# FETCH PRICE FROM AL-FATAH
-# -------------------------------
 def get_alfatah_price(item_name):
-    search_term = item_name.split("(")[0].strip()
-
-    params = {
-        "q": search_term,
-        "resources[type]": "product",
-        "resources[limit]": 1
-    }
-
-    try:
-        response = requests.get(
-            "https://alfatah.pk/search/suggest.json",
-            params=params,
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10
-        )
-
-        if response.status_code != 200:
-            return None
-
-        data = response.json()
-
-        products = (
-            data.get("resources", {})
-                .get("results", {})
-                .get("products", [])
-        )
-
-        if not products:
-            return None
-
-        price_raw = products[0].get("price")
-
-        if price_raw is None:
-            return None
-
-        # ✅ CORRECT: price is already in PKR
-        price = float(price_raw)
-
-        return price
-
-    except Exception as e:
-        print(f"   ⚠️ Error: {e}")
-        return None
-
-    search_term = item_name.split("(")[0].strip()
-
-    params = {
-        "q": search_term,
-        "resources[type]": "product",
-        "resources[limit]": 1
-    }
-
-    try:
-        response = requests.get(
-            "https://alfatah.pk/search/suggest.json",
-            params=params,
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10
-        )
-
-        if response.status_code != 200:
-            return None
-
-        data = response.json()
-
-        products = (
-            data.get("resources", {})
-                .get("results", {})
-                .get("products", [])
-        )
-
-        if not products:
-            return None
-
-        price_raw = products[0].get("price")
-
-        if not price_raw:
-            return None
-
-        # ✅ FIX: convert string → float
-        price = float(price_raw) / 100
-
-        return price
-
-    except Exception as e:
-        print(f"   ⚠️ Error: {e}")
-        return None
-
     """
     Search product using Shopify JSON API and return price (float).
     """
-
-    # Clean name (remove brackets)
+    # Clean name (remove brackets like '(500g)')
     search_term = item_name.split("(")[0].strip()
 
     params = {
@@ -137,86 +44,79 @@ def get_alfatah_price(item_name):
             return None
 
         data = response.json()
-
-        products = (
-            data
-            .get("resources", {})
-            .get("results", {})
-            .get("products", [])
-        )
+        products = (data.get("resources", {}).get("results", {}).get("products", []))
 
         if not products:
             return None
 
-        # Shopify stores price in paisa (cents)
-        price = products[0].get("price")
+        price_raw = products[0].get("price") 
 
-        if price is None:
+        if price_raw is None:
             return None
 
-        return price / 100
+        # --- FIX: REMOVED THE '/ 100' DIVISION ---
+        # Al-Fatah returns "170.00" for Rs 170, not "17000" cents.
+        price = float(price_raw) 
+
+        return price
 
     except Exception as e:
-        print(f"   ⚠️ Error: {e}")
+        print(f"   ⚠️ Error searching '{item_name}': {e}")
         return None
 
-# -------------------------------
-# MAIN SCRAPER LOGIC
-# -------------------------------
-def run_scraper():
-    print(f"\n🔄 Starting Al-Fatah Price Scraper")
-    print(f"🗄 Database: {DB_NAME}")
-
+def update_market_prices(user_id=None):
+    """
+    Updates product prices. 
+    If user_id is provided, ONLY updates that user's items.
+    """
+    print(f"\n🔄 Starting Al-Fatah Price Scraper...")
+    
     if not os.path.exists(DB_NAME):
         print("❌ Database not found!")
-        return
+        return 0
 
     conn = sqlite3.connect(DB_NAME)
     c = conn.cursor()
 
     today = datetime.now().strftime("%Y-%m-%d")
 
+    # --- FIX: FILTER BY USER ID IF PROVIDED ---
     try:
-        items = c.execute(
-            "SELECT item_name FROM products"
-        ).fetchall()
-    except sqlite3.OperationalError:
-        print("❌ 'products' table not found")
-        return
+        if user_id:
+            items = c.execute("SELECT item_name FROM products WHERE user_id = ? AND is_active = 1", (user_id,)).fetchall()
+        else:
+            items = c.execute("SELECT item_name FROM products WHERE is_active = 1").fetchall()
+    except:
+        return 0
 
-    print(f"📦 Found {len(items)} items\n")
+    print(f"📦 Found {len(items)} items to scan for User ID: {user_id if user_id else 'ALL'}\n")
 
-    found_count = 0
+    updated_count = 0
 
     for (item_name,) in items:
-        time.sleep(random.uniform(0.8, 1.8))
+        # Rate limit
+        time.sleep(random.uniform(0.5, 1.5))
 
-        print(f"🔎 Searching: {item_name}...", end=" ", flush=True)
+        print(f"🔎 Scanning: {item_name}...", end=" ", flush=True)
 
         price = get_alfatah_price(item_name)
 
         if price:
             print(f"✅ Rs {price:.2f}")
-            found_count += 1
+            updated_count += 1
 
-            # Update product price
-            c.execute(
-                "UPDATE products SET price = ? WHERE item_name = ?",
-                (price, item_name)
-            )
+            # Update Price
+            c.execute("UPDATE products SET price = ? WHERE item_name = ?", (price, item_name))
 
-            # Insert price history
+            # Add History
             exists = c.execute(
-                "SELECT id FROM price_history WHERE item_name = ? AND date = ?",
+                "SELECT id FROM price_history WHERE item_name = ? AND date = ?", 
                 (item_name, today)
             ).fetchone()
 
             if not exists:
                 c.execute(
-                    """
-                    INSERT INTO price_history (item_name, price, date)
-                    VALUES (?, ?, ?)
-                    """,
+                    "INSERT INTO price_history (item_name, price, date) VALUES (?, ?, ?)",
                     (item_name, price, today)
                 )
         else:
@@ -224,11 +124,7 @@ def run_scraper():
 
     conn.commit()
     conn.close()
+    return updated_count
 
-    print(f"\n✅ Scraping complete — Updated {found_count} items")
-
-# -------------------------------
-# ENTRY POINT
-# -------------------------------
 if __name__ == "__main__":
-    run_scraper()
+    update_market_prices()
