@@ -10,9 +10,10 @@ import {
   Scale,
 } from "lucide-react";
 import { calculateMonthlyNeed } from "../../utils/formatters.jsx";
+// 1. IMPORT THE HELPER
+import { sanitizeQuantity } from "../../utils/mathUtils";
 
 const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
-  // ... (State logic remains exactly the same) ...
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("kg");
   const [category, setCategory] = useState("Staples");
@@ -68,6 +69,7 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
     setUnit(item.consumption_unit);
     setCategory(item.category);
 
+    // Smart Shelf Life Defaults
     if (["Dairy", "Meat", "Fruits"].includes(item.category)) setShelfLife(5);
     else if (["Vegetables", "Bakery"].includes(item.category)) setShelfLife(7);
     else setShelfLife(180);
@@ -82,17 +84,22 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
     e.preventDefault();
     if (!name || !quantity) return;
 
+    // 2. APPLY SANITIZATION
+    // This fixes "0.2 bottles" -> "1 bottle" before adding to DB
+    const finalQuantity = sanitizeQuantity(quantity, unit);
+
     onAddProduct({
       name,
       unit,
       category,
-      quantity: +quantity,
+      quantity: finalQuantity, // Use the sanitized value
       price: +price || 0,
       shelfLife: +shelfLife,
       usageQty: +usageQty,
       usageDays: +usagePeriod,
     });
 
+    // Reset Form
     setName("");
     setQuantity("");
     setPrice("");
@@ -205,6 +212,7 @@ const AddProductForm = ({ catalog, householdSize, onAddProduct }) => {
                 <option value="liters">L</option>
                 <option value="pcs">pcs</option>
                 <option value="pkt">pkt</option>
+                <option value="bottle">bottle</option>
               </select>
             </div>
           </div>

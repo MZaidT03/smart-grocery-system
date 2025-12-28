@@ -1,27 +1,71 @@
-import React, { useState } from "react";
-import { Plus, Package } from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { Plus } from "lucide-react";
 import { formatDisplayQty } from "../../utils/formatters";
 
 const RestockModal = ({ product, onClose, userId, onRestockComplete }) => {
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // 1. FORCE UNIT DETECTION
+  // We clean the unit string right here to be absolutely sure
+  const safeUnit = useMemo(() => {
+    const raw =
+      product.unit || product.consumption_unit || product.measure || "";
+    return raw.toLowerCase().trim();
+  }, [product]);
+
+  // 2. EMBEDDED MATH LOGIC (Bypassing Import Issues)
+  const finalAmount = useMemo(() => {
+    if (!amount) return 0;
+    const val = parseFloat(amount);
+
+    // HARDCODED LIST: If the unit is here, it MUST be an integer
+    const discreteUnits = [
+      "bottle",
+      "bottles",
+      "pkt",
+      "packet",
+      "packets",
+      "pcs",
+      "piece",
+      "pieces",
+      "can",
+      "cans",
+      "box",
+      "boxes",
+      "dozen",
+      "dozens",
+      "jar",
+      "jars",
+    ];
+
+    if (discreteUnits.includes(safeUnit)) {
+      return Math.ceil(val); // 1.4 -> 2
+    }
+    return val; // 1.4 -> 1.4 (for kg, liters)
+  }, [amount, safeUnit]);
+
+  const isIntegerMode =
+    finalAmount !== parseFloat(amount || 0) && parseFloat(amount) > 0;
+
   const handleConfirm = async () => {
-    if (!amount || parseFloat(amount) <= 0) return;
+    if (!amount || finalAmount <= 0) return;
     setLoading(true);
 
     try {
-      // We use the same 'POST /products' endpoint which handles Upsert (Add to existing)
+      console.log(
+        `[DEBUG] Adding ${finalAmount} to ${product.name} (Unit: ${safeUnit})`
+      );
+
       await fetch("http://127.0.0.1:5000/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: product.name,
-          unit: product.unit,
+          unit: safeUnit,
           category: product.category,
-          quantity: parseFloat(amount), // This amount gets ADDED to existing in backend logic
+          quantity: finalAmount, // Sending the clean integer
           userId,
-          // We pass existing rate info so it doesn't get overwritten with defaults
           usageQty: product.usage_freq_qty,
           usageDays: product.usage_freq_days,
         }),
@@ -50,7 +94,7 @@ const RestockModal = ({ product, onClose, userId, onRestockComplete }) => {
         <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 mb-4 flex justify-between items-center">
           <span className="text-zinc-400 text-sm">Current Level:</span>
           <span className="text-white font-mono font-bold">
-            {formatDisplayQty(product.quantity, product.unit)}
+            {formatDisplayQty(product.quantity, safeUnit)}
           </span>
         </div>
 
@@ -68,9 +112,36 @@ const RestockModal = ({ product, onClose, userId, onRestockComplete }) => {
             autoFocus
           />
           <span className="absolute right-4 bottom-4 text-zinc-600 text-sm font-medium">
-            {product.unit}
+            {safeUnit || "unit"}
           </span>
         </div>
+
+        {/* --- DEBUGGING BOX (TELLS US WHY IT FAILS) --- */}
+        {amount > 0 && (
+          <div
+            className={`text-center text-xs mb-4 py-2 rounded-lg border ${
+              isIntegerMode
+                ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                : "bg-red-500/10 border-red-500/30 text-red-400"
+            }`}
+          >
+            <p className="font-bold mb-1 opacity-70">
+              SYSTEM DETECTED UNIT: "{safeUnit}"
+            </p>
+
+            {isIntegerMode ? (
+              <>
+                ✅ Integer Logic Active <br />
+                Raw: {amount} &rarr; <strong>Adding: {finalAmount}</strong>
+              </>
+            ) : (
+              <>
+                ⚠️ Float Logic Active (Is "{safeUnit}" correct?) <br />
+                <strong>Adding: {amount}</strong>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex justify-end space-x-3 border-t border-zinc-800 pt-4">

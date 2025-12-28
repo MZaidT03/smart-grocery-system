@@ -51,18 +51,18 @@ const MarketPrices = () => {
   };
 
   const handleLiveUpdate = async () => {
-    if (
-      !window.confirm(
-        "This will scan Al-Fatah for ALL items. It make take 2-3 minutes. Continue?"
-      )
-    )
-      return;
+    if (!window.confirm("Scan prices for your items?")) return;
 
     setIsScraping(true);
     try {
       const res = await fetch(
         `http://127.0.0.1:5000/analytics/fetch-live-prices`,
-        { method: "POST" }
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // --- FIX: Send userId so backend knows who to scan ---
+          body: JSON.stringify({ userId: userId }),
+        }
       );
       const json = await res.json();
       if (json.success) {
@@ -70,7 +70,7 @@ const MarketPrices = () => {
         fetchPrices();
       }
     } catch (err) {
-      alert("Scraping failed. Check backend logs.");
+      alert("Scraping failed.");
     } finally {
       setIsScraping(false);
     }
