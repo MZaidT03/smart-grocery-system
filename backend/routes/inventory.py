@@ -2,6 +2,8 @@ from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 from database import get_db_connection
 from utils import safe_float
+# 👇👇👇 IMPORT FOR BUDGET GUARD 👇👇👇
+from services.budget import log_expense
 
 inventory_bp = Blueprint('inventory', __name__)
 
@@ -12,12 +14,6 @@ def update_master_catalog(conn, name, category, unit):
     if it doesn't exist yet, using SAFE DEFAULTS for required fields.
     """
     try:
-        # We assume safe defaults so the system doesn't break:
-        # - Daily Consumption: 0.1 (Conservative estimate)
-        # - Diet: Non-Vegan (Safe default)
-        # - Shelf Life: 14 days
-        # - Usage Freq: 7 days
-        
         conn.execute("""
             INSERT INTO product_catalog (
                 item_name, 
@@ -34,15 +30,13 @@ def update_master_catalog(conn, name, category, unit):
     except Exception as e:
         print(f"⚠️ Catalog Auto-Update Failed: {e}")
 
-# --- HELPER: ADD NOTIFICATION (With optional backdating) ---
+# --- HELPER: ADD NOTIFICATION ---
 def log_notification(conn, user_id, title, message, type="info", created_at=None):
     try:
         if created_at:
-            # Backdate the notification
             conn.execute("INSERT INTO notifications (user_id, title, message, type, created_at) VALUES (?, ?, ?, ?, ?)",
                          (user_id, title, message, type, created_at))
         else:
-            # Use current time
             conn.execute("INSERT INTO notifications (user_id, title, message, type) VALUES (?, ?, ?, ?)",
                          (user_id, title, message, type))
     except Exception as e:
@@ -86,11 +80,10 @@ def consume_fifo(conn, product_id, amount_needed):
             
     return amount_needed - amount_left_to_consume
 
-# --- ROBUST AUTO CONSUMPTION (CATCH-UP LOGIC) ---
+# --- ROBUST AUTO CONSUMPTION ---
 def apply_auto_consumption(user_id):
     conn = get_db_connection()
     try:
-        # 1. Find the last time the system successfully ran a daily check
         last_run_row = conn.execute("""
             SELECT MAX(created_at) as last_date 
             FROM notifications 
@@ -109,13 +102,9 @@ def apply_auto_consumption(user_id):
         else:
             last_run_date = today_date - timedelta(days=1)
 
-        # 2. Identify the first missing day
         current_processing_date = last_run_date + timedelta(days=1)
 
-        # 3. Loop: Process EVERY missing day until we reach Today
         while current_processing_date <= today_date:
-            print(f"--- Processing Catch-Up for {current_processing_date} ---")
-            
             products = conn.execute("""
                 SELECT product_id, item_name, consumption_unit, current_quantity, usage_freq_qty, usage_freq_days 
                 FROM products WHERE user_id = ? AND is_active = 1
@@ -134,14 +123,11 @@ def apply_auto_consumption(user_id):
                     
                     if actual_consumed > 0:
                         sync_product_total(conn, p['product_id'])
-                        
-                        # Log Consumption (Backdated)
                         conn.execute("""
                             INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) 
                             VALUES (?, ?, ?, ?)
                         """, (p['product_id'], user_id, actual_consumed, current_processing_date))
                         
-                        # Update Summary
                         conn.execute("""
                             INSERT INTO consumption_summary (product_id, user_id, summary_date, total_consumed)
                             VALUES (?, ?, ?, ?)
@@ -150,20 +136,16 @@ def apply_auto_consumption(user_id):
 
                         daily_logs.append(f"{round(actual_consumed, 2)} {p['consumption_unit']} of {p['item_name']}")
 
-            # 4. Create Notification
             past_timestamp = f"{current_processing_date.strftime('%Y-%m-%d')} 09:00:00"
-            
             if daily_logs:
                 if len(daily_logs) > 2:
-                    msg = f"Automatically consumed {len(daily_logs)} items including {daily_logs[0]}..."
+                    msg = f"Automatically consumed {len(daily_logs)} items..."
                 else:
                     msg = "Automatically consumed " + ", ".join(daily_logs)
                 
                 log_notification(conn, user_id, "Auto Consumption", msg, "info", past_timestamp)
 
-            # 5. Mark as processed
             log_notification(conn, user_id, "System Check", "Daily processing complete", "system", past_timestamp)
-            
             current_processing_date += timedelta(days=1)
 
         conn.commit()
@@ -259,9 +241,14 @@ def manage_products():
             sync_product_total(conn, pid)
             if price > 0: conn.execute("INSERT INTO price_history (item_name, price, date) VALUES (?, ?, date('now'))", (d['name'], price))
             
-            # 👇👇👇 AUTO-LEARN TO MASTER CATALOG 👇👇👇
+            # 1. AUTO-LEARN
             update_master_catalog(conn, d['name'], d.get('category', 'Other'), d['unit'])
-            # 👆👆👆 ----------------------------------- 👆👆👆
+
+            # 👇👇👇 2. LOG EXPENSE (FIXED) 👇👇👇
+            total_cost = safe_float(d.get('quantity'), 0) * price
+            if total_cost > 0:
+                log_expense(d['userId'], total_cost, d.get('category', 'Other'), f"Added {d['name']} manually", conn)
+            # 👆👆👆 -------------------------------- 👆👆👆
 
             log_notification(conn, d['userId'], "Stock Added", f"Added {d['quantity']} {d['unit']} of {d['name']} (Exp: {expiry_date})", "success")
             conn.commit()
@@ -295,7 +282,7 @@ def restock_product(pid):
     user_id = data.get('userId')
     conn = get_db_connection()
     try:
-        product = conn.execute("SELECT item_name, consumption_unit, current_quantity, price FROM products WHERE product_id = ?", (pid,)).fetchone()
+        product = conn.execute("SELECT item_name, category, consumption_unit, current_quantity, price FROM products WHERE product_id = ?", (pid,)).fetchone()
         if not product: return jsonify({'error': 'Product not found'}), 404
         current_qty = safe_float(product['current_quantity'], 0)
         current_unit_price = safe_float(product['price'], 0)
@@ -316,6 +303,12 @@ def restock_product(pid):
         conn.execute("INSERT INTO price_history (item_name, price, date) VALUES (?, ?, date('now'))", (product['item_name'], final_weighted_price))
         sync_product_total(conn, pid)
         msg = f"Restocked {added_qty} {product['consumption_unit']} of {product['item_name']} @ Rs {restock_unit_price}"
+        
+        # LOG EXPENSE
+        total_cost = added_qty * restock_unit_price
+        if user_id and total_cost > 0:
+            log_expense(user_id, total_cost, product['category'] or 'Groceries', f"Restocked {product['item_name']}", conn)
+
         if user_id: log_notification(conn, user_id, "Stock Refilled", msg, "success")
         conn.commit()
         new_total = conn.execute("SELECT current_quantity FROM products WHERE product_id=?", (pid,)).fetchone()['current_quantity']
