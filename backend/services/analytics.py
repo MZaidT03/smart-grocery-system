@@ -1,6 +1,11 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import sqlite3
+
+# --- 1. ADD THIS IMPORT ---
+# We need to import the database connection helper to use it in this file
+from database import get_db_connection 
 
 def get_consumption_forecast(consumption_logs):
     """
@@ -27,7 +32,6 @@ def get_consumption_forecast(consumption_logs):
         values = daily_series.values
         
         # --- MODEL 1: Weighted Moving Average (The "Safe" Trend) ---
-        # We look at the last 30 days
         recent_window = daily_series.tail(30)
         if len(recent_window) == 0: return None
 
@@ -77,7 +81,7 @@ def get_consumption_forecast(consumption_logs):
 def detect_anomaly(recent_qty, consumption_logs):
     """
     Checks if a specific usage amount is an 'Anomaly' (outlier).
-    Uses standard NumPy math (Z-Score) instead of Scipy to be safe.
+    Uses standard NumPy math (Z-Score).
     """
     if not consumption_logs or len(consumption_logs) < 10:
         return False 
@@ -102,3 +106,45 @@ def detect_anomaly(recent_qty, consumption_logs):
         return False
     except:
         return False
+
+def get_ai_learning_status(user_id):
+    """
+    Calculates:
+    1. Total 'Learning Events' (Total logs analyzed)
+    2. Total 'Learned Patterns' (Pairs of items bought together > 2 times)
+    """
+    conn = get_db_connection() # <--- NOW THIS WILL WORK
+    try:
+        # 1. Count Total Transactions (The "Experience")
+        total_txns = conn.execute(
+            "SELECT COUNT(*) FROM consumption_logs WHERE user_id = ?", 
+            (user_id,)
+        ).fetchone()[0]
+
+        # 2. Count "Strong Patterns" (The "Intelligence")
+        # Logic: Find pairs of items (A, B) that appear on the same date > 2 times
+        pattern_query = """
+            SELECT COUNT(*) 
+            FROM (
+                SELECT t1.product_id, t2.product_id
+                FROM consumption_logs t1
+                JOIN consumption_logs t2 
+                  ON t1.user_id = t2.user_id 
+                  AND date(t1.consumption_date) = date(t2.consumption_date)
+                  AND t1.product_id < t2.product_id -- Avoid duplicates (A,B) vs (B,A)
+                WHERE t1.user_id = ?
+                GROUP BY t1.product_id, t2.product_id
+                HAVING COUNT(*) >= 2 -- Threshold: Must happen at least twice to be a "Pattern"
+            )
+        """
+        patterns = conn.execute(pattern_query, (user_id,)).fetchone()[0]
+
+        return {
+            "total_txns": total_txns,
+            "patterns_found": patterns
+        }
+    except Exception as e:
+        print(f"AI Stats Error: {e}")
+        return {"total_txns": 0, "patterns_found": 0}
+    finally:
+        conn.close()

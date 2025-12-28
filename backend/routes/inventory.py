@@ -5,6 +5,35 @@ from utils import safe_float
 
 inventory_bp = Blueprint('inventory', __name__)
 
+# --- HELPER: AUTO-LEARN TO CATALOG ---
+def update_master_catalog(conn, name, category, unit):
+    """
+    Silently adds a new item to the global autocomplete catalog 
+    if it doesn't exist yet, using SAFE DEFAULTS for required fields.
+    """
+    try:
+        # We assume safe defaults so the system doesn't break:
+        # - Daily Consumption: 0.1 (Conservative estimate)
+        # - Diet: Non-Vegan (Safe default)
+        # - Shelf Life: 14 days
+        # - Usage Freq: 7 days
+        
+        conn.execute("""
+            INSERT INTO product_catalog (
+                item_name, 
+                category, 
+                consumption_unit, 
+                daily_consumption_per_person, 
+                diet_type, 
+                default_shelf_life, 
+                default_usage_freq_days
+            )
+            SELECT ?, ?, ?, 0.1, 'Non-Vegan', 14, 7
+            WHERE NOT EXISTS (SELECT 1 FROM product_catalog WHERE item_name = ?)
+        """, (name, category, unit, name))
+    except Exception as e:
+        print(f"⚠️ Catalog Auto-Update Failed: {e}")
+
 # --- HELPER: ADD NOTIFICATION (With optional backdating) ---
 def log_notification(conn, user_id, title, message, type="info", created_at=None):
     try:
@@ -62,7 +91,6 @@ def apply_auto_consumption(user_id):
     conn = get_db_connection()
     try:
         # 1. Find the last time the system successfully ran a daily check
-        # We look for a special 'System Check' notification to know the last processed date.
         last_run_row = conn.execute("""
             SELECT MAX(created_at) as last_date 
             FROM notifications 
@@ -73,17 +101,15 @@ def apply_auto_consumption(user_id):
         today_date = now.date()
 
         if last_run_row and last_run_row['last_date']:
-            # Parse DB date (handle potential format differences)
             try:
-                last_run_str = str(last_run_row['last_date']).split(' ')[0] # Get YYYY-MM-DD
+                last_run_str = str(last_run_row['last_date']).split(' ')[0]
                 last_run_date = datetime.strptime(last_run_str, '%Y-%m-%d').date()
             except:
                 last_run_date = today_date - timedelta(days=1)
         else:
-            # If never run before, assume yesterday was done (start fresh today)
             last_run_date = today_date - timedelta(days=1)
 
-        # 2. Identify the first missing day (The day AFTER the last run)
+        # 2. Identify the first missing day
         current_processing_date = last_run_date + timedelta(days=1)
 
         # 3. Loop: Process EVERY missing day until we reach Today
@@ -98,20 +124,18 @@ def apply_auto_consumption(user_id):
             daily_logs = []
 
             for p in products:
-                # Calculate Daily Rate
                 if p['usage_freq_days'] > 0:
                     daily_rate = p['usage_freq_qty'] / p['usage_freq_days']
                 else:
                     daily_rate = 0
 
-                # Consume for exactly ONE day
                 if daily_rate > 0 and p['current_quantity'] > 0:
                     actual_consumed = consume_fifo(conn, p['product_id'], daily_rate)
                     
                     if actual_consumed > 0:
                         sync_product_total(conn, p['product_id'])
                         
-                        # Log Consumption with PAST DATE (Backdating)
+                        # Log Consumption (Backdated)
                         conn.execute("""
                             INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) 
                             VALUES (?, ?, ?, ?)
@@ -126,8 +150,7 @@ def apply_auto_consumption(user_id):
 
                         daily_logs.append(f"{round(actual_consumed, 2)} {p['consumption_unit']} of {p['item_name']}")
 
-            # 4. Create Notification for THIS specific past day
-            # We set the time to 09:00 AM of that day so grouping works nicely
+            # 4. Create Notification
             past_timestamp = f"{current_processing_date.strftime('%Y-%m-%d')} 09:00:00"
             
             if daily_logs:
@@ -138,11 +161,9 @@ def apply_auto_consumption(user_id):
                 
                 log_notification(conn, user_id, "Auto Consumption", msg, "info", past_timestamp)
 
-            # 5. Mark this day as processed using a hidden 'System Check' notification
-            # This ensures we don't process this day again.
+            # 5. Mark as processed
             log_notification(conn, user_id, "System Check", "Daily processing complete", "system", past_timestamp)
             
-            # Move to next day
             current_processing_date += timedelta(days=1)
 
         conn.commit()
@@ -159,14 +180,9 @@ def manage_products():
     
     if request.method == 'GET':
         uid = request.args.get("userId")
-        
-        # --- TRIGGER: Check logic whenever user loads dashboard ---
-        if uid: 
-            apply_auto_consumption(uid) 
-        # --------------------------------------------------------
+        if uid: apply_auto_consumption(uid) 
 
         try:
-            # JOIN with Batches to get Next Expiry
             query = """
                 SELECT p.product_id as id, p.item_name as name, p.consumption_unit as unit, 
                        p.current_quantity as quantity, p.category, p.usage_freq_qty, 
@@ -179,14 +195,11 @@ def manage_products():
                 ORDER BY p.updated_at DESC
             """
             rows = conn.execute(query, (uid,)).fetchall()
-            
             results = []
             now_date = datetime.now().date()
 
             for r in rows:
                 d = dict(r)
-                
-                # Rate Logic
                 manual_qty = safe_float(d.get('usage_freq_qty'), 1)
                 manual_days = safe_float(d.get('usage_freq_days'), 1)
                 manual_daily_rate = manual_qty / manual_days if manual_days > 0 else 0
@@ -203,8 +216,8 @@ def manage_products():
                 
                 d['effective_daily_rate'] = effective_rate
                 d['price'] = safe_float(d.get('price'), 0)
-
                 d['expiry_days'] = 999 
+
                 if d['next_expiry']:
                     try:
                         exp_date = datetime.strptime(str(d['next_expiry']), "%Y-%m-%d").date()
@@ -212,15 +225,12 @@ def manage_products():
                         d['expiry_days'] = delta
                     except:
                         pass 
-
                 results.append(d)
 
             return jsonify(results)
         finally:
             conn.close()
 
-    # ... (Keep the rest of your routes: POST, PUT, DELETE same as before) ...
-    # Be sure to include the POST, PUT, DELETE methods from previous response here
     if request.method == 'POST':
         d = request.json
         freq_qty = safe_float(d.get('usageQty', 1))
@@ -248,6 +258,11 @@ def manage_products():
             conn.execute("INSERT INTO product_batches (product_id, quantity, expiry_date) VALUES (?, ?, ?)", (pid, d['quantity'], expiry_date))
             sync_product_total(conn, pid)
             if price > 0: conn.execute("INSERT INTO price_history (item_name, price, date) VALUES (?, ?, date('now'))", (d['name'], price))
+            
+            # 👇👇👇 AUTO-LEARN TO MASTER CATALOG 👇👇👇
+            update_master_catalog(conn, d['name'], d.get('category', 'Other'), d['unit'])
+            # 👆👆👆 ----------------------------------- 👆👆👆
+
             log_notification(conn, d['userId'], "Stock Added", f"Added {d['quantity']} {d['unit']} of {d['name']} (Exp: {expiry_date})", "success")
             conn.commit()
             return jsonify({"success": True})

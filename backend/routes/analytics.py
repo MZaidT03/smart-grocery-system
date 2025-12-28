@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from database import get_db_connection
 from services.analytics import get_consumption_forecast, detect_anomaly
 from services.scraper import update_market_prices
+from services.analytics import get_ai_learning_status # <--- Import the new function
 
 analytics_bp = Blueprint('analytics', __name__)
 
@@ -313,3 +314,13 @@ def fetch_live_prices():
     except Exception as e:
         print(f"Scraper Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
+
+
+@analytics_bp.route('/analytics/status', methods=['GET'])
+def ai_status():
+    user_id = request.args.get('userId')
+    if not user_id:
+        return jsonify({"success": False}), 400
+    
+    stats = get_ai_learning_status(user_id)
+    return jsonify({"success": True, "stats": stats})
