@@ -1,5 +1,5 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -10,8 +10,13 @@ import {
   View,
 } from "react-native";
 import { API_BASE_URL } from "@/constants/api";
+import { useTheme } from "@/context/theme"; // Using your updated theme context
 
 export default function ProductsScreen() {
+  // Pull the pure black/white/green minimal colors directly from the context
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const router = useRouter();
   const params = useLocalSearchParams();
   const userId = Array.isArray(params.userId)
@@ -19,7 +24,7 @@ export default function ProductsScreen() {
     : params.userId;
 
   const [loading, setLoading] = useState(true);
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState<any[]>([]);
 
   useEffect(() => {
     if (!userId) return;
@@ -50,7 +55,7 @@ export default function ProductsScreen() {
 
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color="#0E3A32" />
+          <ActivityIndicator size="large" color={colors.accent1} />
         </View>
       ) : products.length === 0 ? (
         <View style={styles.emptyState}>
@@ -88,85 +93,87 @@ export default function ProductsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F6F1E8",
-  },
-  headerRow: {
-    padding: 20,
-    paddingBottom: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  backButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E0D6CC",
-  },
-  backButtonText: {
-    color: "#1F2A24",
-    fontWeight: "600",
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#2C2C2C",
-  },
-  count: {
-    minWidth: 28,
-    textAlign: "center",
-    fontWeight: "700",
-    color: "#0E3A32",
-  },
-  listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 12,
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#E0D6CC",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#2C2C2C",
-  },
-  cardSubtitle: {
-    fontSize: 12,
-    color: "#8C7C71",
-    marginTop: 4,
-  },
-  cardQty: {
-    fontWeight: "600",
-    color: "#2C2C2C",
-  },
-  loadingWrap: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingTop: 60,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#2C2C2C",
-  },
-  emptyBody: {
-    color: "#6B5E55",
-    marginTop: 6,
-  },
-});
+// Map everything to the new dynamic colors context
+const createStyles = (colors: any) =>
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    headerRow: {
+      padding: 20,
+      paddingBottom: 10,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    backButton: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      backgroundColor: colors.surface1,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    backButtonText: {
+      color: colors.text1,
+      fontWeight: "600",
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.text1,
+    },
+    count: {
+      minWidth: 28,
+      textAlign: "center",
+      fontWeight: "700",
+      color: colors.accent1, // Brand Green accent
+    },
+    listContent: {
+      paddingHorizontal: 20,
+      paddingBottom: 20,
+      gap: 12,
+    },
+    card: {
+      backgroundColor: colors.surface1,
+      borderRadius: 16,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    cardTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: colors.text1,
+    },
+    cardSubtitle: {
+      fontSize: 13,
+      color: colors.text2,
+      marginTop: 4,
+    },
+    cardQty: {
+      fontWeight: "600",
+      color: colors.text1,
+    },
+    loadingWrap: {
+      flex: 1,
+      justifyContent: "center",
+    },
+    emptyState: {
+      alignItems: "center",
+      paddingTop: 60,
+    },
+    emptyTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.text1,
+    },
+    emptyBody: {
+      color: colors.text2,
+      marginTop: 6,
+    },
+  });

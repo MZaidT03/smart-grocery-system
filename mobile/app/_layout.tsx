@@ -1,8 +1,11 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
+import { ThemeProvider, useTheme } from "@/context/theme";
 
-export default function RootLayout() {
+function RootStack() {
+  const { scheme } = useTheme();
+
   return (
     <>
       <Stack screenOptions={{ headerShown: false }}>
@@ -12,8 +15,17 @@ export default function RootLayout() {
         <Stack.Screen name="home" />
         <Stack.Screen name="products" />
         <Stack.Screen name="product" />
+        <Stack.Screen name="recipes" />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar style={scheme === "dark" ? "light" : "dark"} />
     </>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <RootStack />
+    </ThemeProvider>
   );
 }

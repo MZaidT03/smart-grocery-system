@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
+import ThemeToggle from "./ThemeToggle";
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({ username: "", password: "" });
@@ -54,26 +55,31 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen theme-bg flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background Decor */}
-      <div className="absolute top-0 left-0 w-96 h-96 bg-amber-500/10 rounded-full blur-[100px] -translate-x-1/2 -translate-y-1/2"></div>
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-emerald-500/10 rounded-full blur-[100px] translate-x-1/2 translate-y-1/2"></div>
+      <div className="absolute top-0 left-0 w-96 h-96 bg-[var(--accent-2)]/10 rounded-full blur-[100px] -translate-x-1/2 -translate-y-1/2"></div>
+      <div className="absolute bottom-0 right-0 w-96 h-96 bg-[var(--accent-1)]/10 rounded-full blur-[100px] translate-x-1/2 translate-y-1/2"></div>
 
-      <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 p-8 rounded-3xl shadow-2xl relative z-10">
+      <div className="w-full max-w-md bg-[var(--surface-1)] border border-[var(--border)] p-8 rounded-3xl shadow-elevated relative z-10">
+        <div className="flex justify-end mb-4">
+          <ThemeToggle />
+        </div>
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-zinc-950 border border-zinc-800 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
-            <ShoppingCart className="w-8 h-8 text-amber-500" />
+          <div className="w-16 h-16 bg-[var(--surface-2)] border border-[var(--border)] rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+            <ShoppingCart className="w-8 h-8 text-[var(--accent-2)]" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Welcome Back</h1>
-          <p className="text-zinc-500 text-sm">
+          <h1 className="text-2xl font-bold text-[var(--text-1)] mb-2">
+            Welcome Back
+          </h1>
+          <p className="text-[var(--text-3)] text-sm">
             Login to manage your smart inventory
           </p>
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400 text-sm animate-in fade-in slide-in-from-top-2">
+          <div className="mb-6 p-4 bg-[var(--surface-2)] border border-[var(--danger)]/30 rounded-xl flex items-center gap-3 text-[var(--danger)] text-sm animate-in fade-in slide-in-from-top-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>
@@ -83,11 +89,11 @@ const LoginPage = () => {
           {/* Username Input */}
           <div className="space-y-1">
             <div className="relative group">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within:text-amber-500 transition-colors" />
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-3)] group-focus-within:text-[var(--accent-2)] transition-colors" />
               <input
                 type="text"
                 placeholder="Username or Email"
-                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm rounded-xl pl-12 pr-4 py-3.5 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 outline-none transition-all placeholder:text-zinc-600"
+                className="w-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-1)] text-sm rounded-xl pl-12 pr-4 py-3.5 focus:border-[var(--accent-2)] focus:ring-1 focus:ring-[var(--accent-2)]/30 outline-none transition-all placeholder:text-[var(--text-3)]"
                 value={formData.username}
                 onChange={(e) =>
                   setFormData({ ...formData, username: e.target.value })
@@ -100,11 +106,11 @@ const LoginPage = () => {
           {/* Password Input */}
           <div className="space-y-1">
             <div className="relative group">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 group-focus-within:text-amber-500 transition-colors" />
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-3)] group-focus-within:text-[var(--accent-2)] transition-colors" />
               <input
                 type="password"
                 placeholder="••••••"
-                className="w-full bg-zinc-950 border border-zinc-800 text-zinc-100 text-sm rounded-xl pl-12 pr-4 py-3.5 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 outline-none transition-all placeholder:text-zinc-600 font-mono"
+                className="w-full bg-[var(--surface-2)] border border-[var(--border)] text-[var(--text-1)] text-sm rounded-xl pl-12 pr-4 py-3.5 focus:border-[var(--accent-2)] focus:ring-1 focus:ring-[var(--accent-2)]/30 outline-none transition-all placeholder:text-[var(--text-3)] font-mono"
                 value={formData.password}
                 onChange={(e) =>
                   setFormData({ ...formData, password: e.target.value })
@@ -118,7 +124,7 @@ const LoginPage = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-black font-bold py-3.5 rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2"
+            className="w-full bg-[var(--accent-2)] hover:bg-[var(--accent-1)] text-[var(--surface-1)] font-bold py-3.5 rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98] shadow-elevated flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2"
           >
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -132,11 +138,11 @@ const LoginPage = () => {
 
         {/* Footer */}
         <div className="mt-8 text-center">
-          <p className="text-zinc-500 text-sm">
+          <p className="text-[var(--text-3)] text-sm">
             Don't have an account?{" "}
             <Link
               to="/register"
-              className="text-amber-500 hover:text-amber-400 font-bold hover:underline transition-all"
+              className="text-[var(--accent-2)] hover:text-[var(--accent-1)] font-bold hover:underline transition-all"
             >
               Register
             </Link>

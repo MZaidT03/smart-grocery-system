@@ -1,14 +1,85 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useTheme } from "@/context/theme"; // Using your updated theme context
 
-const ACTIONS = [
-  { key: "recipes", title: "Recipes", subtitle: "Smart cook" },
-  { key: "prices", title: "Prices", subtitle: "Market trends" },
-  { key: "shopping", title: "Shopping", subtitle: "Auto list" },
-  { key: "forecast", title: "Forecast", subtitle: "Usage trend" },
+// We use RGBA here to create a "glass" effect over your pure black/white backgrounds
+const buildActions = (scheme: "light" | "dark") => [
+  {
+    key: "recipes",
+    title: "Recipes",
+    subtitle: "Smart cook",
+    tone:
+      scheme === "dark"
+        ? {
+            bg: "rgba(245, 158, 11, 0.1)",
+            border: "rgba(245, 158, 11, 0.5)",
+            accent: "#fbbf24",
+          } // Amber
+        : {
+            bg: "rgba(245, 158, 11, 0.08)",
+            border: "rgba(245, 158, 11, 0.4)",
+            accent: "#f59e0b",
+          },
+  },
+  {
+    key: "prices",
+    title: "Prices",
+    subtitle: "Market trends",
+    tone:
+      scheme === "dark"
+        ? {
+            bg: "rgba(59, 130, 246, 0.1)",
+            border: "rgba(59, 130, 246, 0.5)",
+            accent: "#60a5fa",
+          } // Blue
+        : {
+            bg: "rgba(59, 130, 246, 0.08)",
+            border: "rgba(59, 130, 246, 0.4)",
+            accent: "#3b82f6",
+          },
+  },
+  {
+    key: "shopping",
+    title: "Shopping",
+    subtitle: "Auto list",
+    tone:
+      scheme === "dark"
+        ? {
+            bg: "rgba(16, 185, 129, 0.1)",
+            border: "rgba(16, 185, 129, 0.5)",
+            accent: "#34d399",
+          } // Emerald (Brand)
+        : {
+            bg: "rgba(16, 185, 129, 0.08)",
+            border: "rgba(16, 185, 129, 0.4)",
+            accent: "#10b981",
+          },
+  },
+  {
+    key: "forecast",
+    title: "Forecast",
+    subtitle: "Usage trend",
+    tone:
+      scheme === "dark"
+        ? {
+            bg: "rgba(139, 92, 246, 0.1)",
+            border: "rgba(139, 92, 246, 0.5)",
+            accent: "#a78bfa",
+          } // Purple
+        : {
+            bg: "rgba(139, 92, 246, 0.08)",
+            border: "rgba(139, 92, 246, 0.4)",
+            accent: "#8b5cf6",
+          },
+  },
 ];
 
-export default function QuickActions({ onAction }) {
+export default function QuickActions({ onAction }: any) {
+  // Pull the colors and scheme from your minimal theme context
+  const { colors, scheme } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const actions = useMemo(() => buildActions(scheme), [scheme]);
+
   return (
     <View>
       <View style={styles.headerRow}>
@@ -20,12 +91,24 @@ export default function QuickActions({ onAction }) {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.row}
       >
-        {ACTIONS.map((action) => (
+        {actions.map((action) => (
           <Pressable
             key={action.key}
-            style={styles.card}
+            style={[
+              styles.card,
+              {
+                backgroundColor: action.tone.bg,
+                borderColor: action.tone.border,
+              },
+            ]}
             onPress={() => onAction(action.key)}
           >
+            <View
+              style={[
+                styles.accentBar,
+                { backgroundColor: action.tone.accent },
+              ]}
+            />
             <Text style={styles.cardTitle}>{action.title}</Text>
             <Text style={styles.cardSub}>{action.subtitle}</Text>
           </Pressable>
@@ -35,41 +118,53 @@ export default function QuickActions({ onAction }) {
   );
 }
 
-const styles = StyleSheet.create({
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#2C2C2C",
-  },
-  meta: {
-    color: "#8C7C71",
-    fontSize: 12,
-  },
-  row: {
-    paddingTop: 10,
-    gap: 12,
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 14,
-    minWidth: 140,
-    borderWidth: 1,
-    borderColor: "#E0D6CC",
-  },
-  cardTitle: {
-    color: "#1F2A24",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  cardSub: {
-    color: "#8C7C71",
-    marginTop: 4,
-    fontSize: 12,
-  },
-});
+// Mapped dynamically to your global colors
+const createStyles = (colors: any) =>
+  StyleSheet.create({
+    headerRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 2, // Slight indent alignment
+    },
+    title: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: colors.text1,
+    },
+    meta: {
+      color: colors.text3,
+      fontSize: 12,
+      fontWeight: "500",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    row: {
+      paddingTop: 12,
+      gap: 12,
+      paddingRight: 20, // Ensures the last item doesn't get cut off on scroll
+    },
+    card: {
+      borderRadius: 18,
+      padding: 16,
+      minWidth: 140,
+      borderWidth: 1, // Uses the 50% opacity colored borders from buildActions
+      gap: 10,
+    },
+    accentBar: {
+      width: 32,
+      height: 4,
+      borderRadius: 999,
+      marginBottom: 4, // Pushes the text down slightly
+    },
+    cardTitle: {
+      color: colors.text1,
+      fontWeight: "700",
+      fontSize: 15,
+    },
+    cardSub: {
+      color: colors.text2,
+      marginTop: 2,
+      fontSize: 13,
+    },
+  });

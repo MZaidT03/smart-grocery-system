@@ -4,6 +4,7 @@ import {
   Alert,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -14,6 +15,7 @@ import BudgetCard from "@/components/home/BudgetCard";
 import HomeHeader from "@/components/home/HomeHeader";
 import ProductPreview from "@/components/home/ProductPreview";
 import QuickActions from "@/components/home/QuickActions";
+import { useTheme } from "@/context/theme"; // Using your updated theme context
 
 type CatalogItem = {
   consumption_unit?: string;
@@ -42,6 +44,12 @@ type BudgetStatus = {
 type QuickActionKey = "recipes" | "prices" | "shopping" | "forecast";
 
 export default function HomeScreen() {
+  // Pull the active high-end minimal colors directly from the context
+  const { colors } = useTheme();
+
+  // Pass the colors to our StyleSheet
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const router = useRouter();
   const params = useLocalSearchParams();
   const userId = Array.isArray(params.userId)
@@ -195,7 +203,10 @@ export default function HomeScreen() {
 
   const handleQuickAction = (key: QuickActionKey) => {
     if (key === "recipes") {
-      Alert.alert("Recipes", "Coming soon on mobile.");
+      router.push({
+        pathname: "/recipes",
+        params: { userId: String(userId), name: displayName ?? "" },
+      });
       return;
     }
     if (key === "prices") {
@@ -230,7 +241,10 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         <HomeHeader
           displayName={displayName}
           totalItems={totalItems}
@@ -239,14 +253,14 @@ export default function HomeScreen() {
           onAddPress={() => setShowAddModal(true)}
         />
 
+        <QuickActions onAction={handleQuickAction} />
+
         <BudgetCard
           budget={budget}
           budgetLimit={budgetLimit}
           onBudgetLimitChange={setBudgetLimit}
           onSaveBudget={handleSetBudget}
         />
-
-        <QuickActions onAction={handleQuickAction} />
 
         <ProductPreview
           loading={loading}
@@ -267,7 +281,7 @@ export default function HomeScreen() {
             })
           }
         />
-      </View>
+      </ScrollView>
 
       <AddProductModal
         visible={showAddModal}
@@ -296,40 +310,41 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F6F1E8",
-  },
-  container: {
-    padding: 20,
-    gap: 18,
-    justifyContent: "space-between",
-    flex: 1,
-  },
-  emptyState: {
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 40,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#2C2C2C",
-  },
-  emptyBody: {
-    color: "#6B5E55",
-  },
-  primaryButton: {
-    backgroundColor: "#0E3A32",
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: "center",
-  },
-  primaryButtonText: {
-    color: "#FDE7C6",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-});
+// Updated to map to your new minimal Theme Colors (bg, text1, text2, accent1, etc.)
+const createStyles = (colors: any) =>
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    scrollContent: {
+      padding: 20,
+      paddingBottom: 30,
+      gap: 18,
+    },
+    emptyState: {
+      alignItems: "center",
+      gap: 8,
+      paddingVertical: 40,
+    },
+    emptyTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.text1,
+    },
+    emptyBody: {
+      color: colors.text2,
+    },
+    primaryButton: {
+      backgroundColor: colors.accent1, // Brand Green
+      borderRadius: 16,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      alignItems: "center",
+    },
+    primaryButtonText: {
+      color: colors.bg, // Makes text white in light mode, pure black in dark mode
+      fontSize: 14,
+      fontWeight: "600",
+    },
+  });

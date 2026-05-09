@@ -1,5 +1,5 @@
 import { Link } from "expo-router";
-import React from "react";
+import React, { useMemo } from "react";
 import {
   Pressable,
   SafeAreaView,
@@ -8,12 +8,21 @@ import {
   Text,
   View,
 } from "react-native";
+import { useTheme } from "@/context/theme";
+import ThemeToggle from "@/components/theme-toggle";
 
 export default function LandingScreen() {
+  // Pull the pure black/white/green minimal colors directly from the context
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.heroCard}>
+          <View style={styles.heroTopRow}>
+            <ThemeToggle />
+          </View>
           <Text style={styles.appName}>Smart Grocery</Text>
           <Text style={styles.tagline}>
             Plan smarter. Waste less. Save more.
@@ -67,94 +76,102 @@ export default function LandingScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F4F1EA",
-  },
-  container: {
-    padding: 20,
-    gap: 18,
-  },
-  heroCard: {
-    backgroundColor: "#0E3A32",
-    padding: 24,
-    borderRadius: 20,
-  },
-  appName: {
-    color: "#FDE7C6",
-    fontSize: 28,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-  },
-  tagline: {
-    color: "#FDE7C6",
-    fontSize: 18,
-    marginTop: 10,
-  },
-  heroBody: {
-    color: "#F1F5F2",
-    fontSize: 14,
-    marginTop: 12,
-    lineHeight: 20,
-  },
-  heroActions: {
-    marginTop: 18,
-    gap: 12,
-  },
-  primaryButton: {
-    backgroundColor: "#F49E4C",
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  primaryButtonText: {
-    color: "#2D1D12",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  secondaryButton: {
-    borderWidth: 1,
-    borderColor: "#FDE7C6",
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  secondaryButtonText: {
-    color: "#FDE7C6",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  featureGrid: {
-    gap: 14,
-  },
-  featureCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 18,
-    shadowColor: "#1A120B",
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
-  },
-  featureTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#2C2C2C",
-  },
-  featureBody: {
-    marginTop: 6,
-    fontSize: 14,
-    color: "#5F5F5F",
-    lineHeight: 20,
-  },
-  footer: {
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  footerText: {
-    color: "#7A6C61",
-    fontSize: 12,
-  },
-});
+// Updated to map to your new minimal Theme Colors
+const createStyles = (colors: any) =>
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    container: {
+      padding: 20,
+      gap: 24, // Increased gap for minimalist breathing room
+    },
+    heroCard: {
+      backgroundColor: colors.surface1, // Subtle distinction from bg
+      padding: 24,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.border, // Crisp, premium border
+    },
+    heroTopRow: {
+      alignItems: "flex-end",
+      marginBottom: 10,
+    },
+    appName: {
+      color: colors.text1,
+      fontSize: 32,
+      fontWeight: "800",
+      letterSpacing: -0.5, // Tighter letter spacing for a modern look
+    },
+    tagline: {
+      color: colors.text1,
+      fontSize: 18,
+      fontWeight: "600",
+      marginTop: 8,
+    },
+    heroBody: {
+      color: colors.text2,
+      fontSize: 15,
+      marginTop: 12,
+      lineHeight: 22,
+    },
+    heroActions: {
+      marginTop: 24,
+      gap: 12,
+    },
+    primaryButton: {
+      backgroundColor: colors.accent1, // Single pop of Brand Green
+      borderRadius: 14,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    primaryButtonText: {
+      color: colors.bg, // Reverses out depending on theme (black text in dark mode, white in light)
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    secondaryButton: {
+      backgroundColor: colors.surface2,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      paddingVertical: 14,
+      alignItems: "center",
+    },
+    secondaryButtonText: {
+      color: colors.text1,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    featureGrid: {
+      gap: 14,
+    },
+    featureCard: {
+      backgroundColor: colors.surface1,
+      borderRadius: 16,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      // Removed heavy shadow for a flat, minimal aesthetic
+    },
+    featureTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: colors.text1,
+    },
+    featureBody: {
+      marginTop: 6,
+      fontSize: 14,
+      color: colors.text2,
+      lineHeight: 20,
+    },
+    footer: {
+      alignItems: "center",
+      paddingVertical: 10,
+    },
+    footerText: {
+      color: colors.text3,
+      fontSize: 12,
+    },
+  });
