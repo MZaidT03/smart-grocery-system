@@ -1,1 +1,229 @@
 @import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  /* Ultra-Minimal Light Theme */
+  --bg: #ffffff; /* Pure white background */
+  --surface-1: #fafafa; /* Barely-there gray for subtle separation */
+  --surface-2: #f5f5f5; /* Soft gray for inputs/secondary areas */
+  --surface-3: #eeeeee;
+
+  --text-1: #000000; /* Pure black for stark, minimal contrast */
+  --text-2: #666666; /* Clean neutral gray */
+  --text-3: #999999;
+  --border: #e5e5e5; /* Very light, clean borders */
+
+  --accent-1: #166534; /* Deep Forest Green - Single elegant brand color */
+  --accent-2: #000000; /* Pure Black - For stark, minimal CTAs */
+  --accent-3: #f5f5f5; /* Neutral gray accent for unselected states */
+
+  --success: #15803d;
+  --warning: #ca8a04;
+  --danger: #dc2626;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  /* Ultra-Minimal Dark Theme */
+  --bg: #1a1a1a; /* Pure black */
+  --surface-1: rgba(23, 23, 23, 0.853); /* Extremely subtle elevation */
+  --surface-2: #1a1a1aa7;
+  --surface-3: #1a1a1a87;
+
+  --text-1: #ffffff; /* Pure white text */
+  --text-2: #888888; /* Clean, legible mid-gray */
+  --text-3: #555555;
+  --border: #262626;
+
+  --accent-1: #4ade80; /* Crisp Mint Green - Single brand color */
+  --accent-2: #ffffff; /* Pure White - For stark, minimal CTAs */
+  --accent-3: #1a1a1a; /* Neutral dark accent */
+
+  --success: #22c55e;
+  --warning: #eab308;
+  --danger: #ef4444;
+  --shadow: 0 4px 32px rgba(0, 0, 0, 0.6);
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-1);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--text-1) 15%, transparent);
+}
+
+/* Base Utility Classes */
+.theme-bg {
+  background-color: var(--bg);
+  color: var(--text-1);
+}
+.surface-1 {
+  background-color: var(--surface-1);
+}
+.surface-2 {
+  background-color: var(--surface-2);
+}
+.surface-3 {
+  background-color: var(--surface-3);
+}
+
+.text-1 {
+  color: var(--text-1);
+}
+.text-2 {
+  color: var(--text-2);
+}
+.text-3 {
+  color: var(--text-3);
+}
+
+.border-1 {
+  border-color: var(--border);
+}
+
+/* Accents */
+.accent-1 {
+  color: var(--accent-1);
+}
+.accent-2 {
+  color: var(--accent-2);
+}
+.accent-3 {
+  color: var(--text-2);
+} /* Mapped to neutral text for minimalism */
+
+/* Buttons & Solid Elements */
+.bg-accent-1 {
+  background-color: var(--accent-1);
+  color: var(--bg);
+}
+.bg-accent-2 {
+  background-color: var(--accent-2);
+  color: var(--bg);
+}
+.bg-accent-3 {
+  background-color: var(--surface-2);
+  color: var(--text-1);
+}
+
+/* Ensure high contrast for dark mode buttons */
+[data-theme="dark"] .bg-accent-1 {
+  color: #000000;
+}
+[data-theme="dark"] .bg-accent-2 {
+  color: #000000;
+}
+
+.shadow-elevated {
+  box-shadow: var(--shadow);
+}
+
+/* --- Tailwind Color Overrides --- */
+
+/* Strict Grayscale Neutrals */
+.bg-zinc-950,
+.bg-gray-950 {
+  background-color: var(--bg) !important;
+}
+.bg-zinc-900,
+.bg-gray-900 {
+  background-color: var(--surface-1) !important;
+}
+.bg-zinc-800,
+.bg-gray-800 {
+  background-color: var(--surface-2) !important;
+}
+.bg-zinc-700,
+.bg-gray-700 {
+  background-color: var(--surface-3) !important;
+}
+
+/* Translucency */
+.bg-zinc-900\/80 {
+  background-color: color-mix(
+    in srgb,
+    var(--surface-1) 80%,
+    transparent
+  ) !important;
+}
+.bg-zinc-900\/50 {
+  background-color: color-mix(
+    in srgb,
+    var(--surface-1) 50%,
+    transparent
+  ) !important;
+}
+
+/* Text Scaling */
+.text-white,
+.text-zinc-100,
+.text-zinc-200 {
+  color: var(--text-1) !important;
+}
+.text-zinc-300,
+.text-zinc-400,
+.text-zinc-500 {
+  color: var(--text-2) !important;
+}
+.text-zinc-600 {
+  color: var(--text-3) !important;
+}
+
+/* Border Scaling */
+.border-zinc-900,
+.border-zinc-800,
+.border-zinc-700,
+.border-zinc-200 {
+  border-color: var(--border) !important;
+}
+
+/* Override loud colors with minimal Brand/Monochrome values */
+.text-amber-500,
+.text-orange-500,
+.text-indigo-500,
+.text-blue-500 {
+  color: var(--text-1) !important;
+}
+.bg-amber-500,
+.bg-orange-500,
+.bg-indigo-500,
+.bg-blue-500 {
+  background-color: var(--text-1) !important;
+  color: var(--bg) !important;
+}
+
+/* Accent: Minimal Grocer Green */
+.text-emerald-400,
+.text-emerald-500,
+.text-emerald-600 {
+  color: var(--accent-1) !important;
+}
+.bg-emerald-500,
+.bg-emerald-600 {
+  background-color: var(--accent-1) !important;
+  color: var(--bg) !important;
+}
+.bg-emerald-500\/10 {
+  background-color: color-mix(
+    in srgb,
+    var(--accent-1) 10%,
+    transparent
+  ) !important;
+}
+
+/* System States */
+.text-red-500 {
+  color: var(--danger) !important;
+}
+.bg-red-500\/10 {
+  background-color: color-mix(
+    in srgb,
+    var(--danger) 10%,
+    transparent
+  ) !important;
+}

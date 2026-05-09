@@ -13,8 +13,13 @@ import {
   View,
 } from "react-native";
 import { API_BASE_URL } from "@/constants/api";
+import { useTheme } from "@/context/theme"; // Using your updated theme context
 
 export default function ProductScreen() {
+  // Pull the pure black/white/green minimal colors directly from the context
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+
   const router = useRouter();
   const params = useLocalSearchParams();
   const userId = Array.isArray(params.userId)
@@ -25,7 +30,7 @@ export default function ProductScreen() {
     : params.productId;
 
   const [loading, setLoading] = useState(true);
-  const [product, setProduct] = useState(null);
+  const [product, setProduct] = useState<any>(null);
   const [showConsume, setShowConsume] = useState(false);
   const [showRestock, setShowRestock] = useState(false);
   const [consumeAmount, setConsumeAmount] = useState("");
@@ -55,19 +60,22 @@ export default function ProductScreen() {
     load();
   }, [userId, productId]);
 
+  // Updated tone logic to map directly to your minimal theme values
   const tone = useMemo(() => {
-    if (!product) return { label: "", fg: "#6B5E55", bg: "#EFE7DC" };
+    if (!product) {
+      return { label: "", fg: colors.text2, bg: colors.surface2 };
+    }
     if (product.days_left === -1 || product.days_left === undefined) {
-      return { label: "Unknown", fg: "#6B5E55", bg: "#EFE7DC" };
+      return { label: "Unknown", fg: colors.text2, bg: colors.surface2 };
     }
     if (product.days_left < 3) {
-      return { label: "Low", fg: "#B42318", bg: "#FEE4E2" };
+      return { label: "Low", fg: colors.danger, bg: colors.surface2 };
     }
     if (product.days_left < 7) {
-      return { label: "Watch", fg: "#B54708", bg: "#FFE7D0" };
+      return { label: "Watch", fg: colors.warning, bg: colors.surface2 };
     }
-    return { label: "OK", fg: "#0E3A32", bg: "#DDF3E4" };
-  }, [product]);
+    return { label: "OK", fg: colors.accent1, bg: colors.surface2 };
+  }, [colors, product]);
 
   const handleConsume = async () => {
     if (!product || !userId || !consumeAmount) {
@@ -172,7 +180,7 @@ export default function ProductScreen() {
 
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color="#0E3A32" />
+          <ActivityIndicator size="large" color={colors.accent1} />
         </View>
       ) : !product ? (
         <View style={styles.emptyState}>
@@ -236,7 +244,7 @@ export default function ProductScreen() {
               value={consumeAmount}
               onChangeText={setConsumeAmount}
               placeholder="Amount consumed"
-              placeholderTextColor="#9C9085"
+              placeholderTextColor={colors.text3}
               keyboardType="decimal-pad"
               style={styles.input}
             />
@@ -244,7 +252,7 @@ export default function ProductScreen() {
               value={consumeRateQty}
               onChangeText={setConsumeRateQty}
               placeholder="New usage qty (optional)"
-              placeholderTextColor="#9C9085"
+              placeholderTextColor={colors.text3}
               keyboardType="decimal-pad"
               style={styles.input}
             />
@@ -252,7 +260,7 @@ export default function ProductScreen() {
               value={consumeRateDays}
               onChangeText={setConsumeRateDays}
               placeholder="New usage days (optional)"
-              placeholderTextColor="#9C9085"
+              placeholderTextColor={colors.text3}
               keyboardType="decimal-pad"
               style={styles.input}
             />
@@ -280,7 +288,7 @@ export default function ProductScreen() {
               value={restockQty}
               onChangeText={setRestockQty}
               placeholder="Added quantity"
-              placeholderTextColor="#9C9085"
+              placeholderTextColor={colors.text3}
               keyboardType="decimal-pad"
               style={styles.input}
             />
@@ -288,7 +296,7 @@ export default function ProductScreen() {
               value={restockPrice}
               onChangeText={setRestockPrice}
               placeholder="New price per unit"
-              placeholderTextColor="#9C9085"
+              placeholderTextColor={colors.text3}
               keyboardType="decimal-pad"
               style={styles.input}
             />
@@ -296,7 +304,7 @@ export default function ProductScreen() {
               value={restockExpiryDays}
               onChangeText={setRestockExpiryDays}
               placeholder="Expiry days (optional)"
-              placeholderTextColor="#9C9085"
+              placeholderTextColor={colors.text3}
               keyboardType="number-pad"
               style={styles.input}
             />
@@ -318,166 +326,171 @@ export default function ProductScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F6F1E8",
-  },
-  headerRow: {
-    padding: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  backButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#E0D6CC",
-  },
-  backButtonText: {
-    color: "#1F2A24",
-    fontWeight: "600",
-  },
-  headerSpacer: {
-    width: 50,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#2C2C2C",
-  },
-  content: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
-    gap: 16,
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: "#E0D6CC",
-    gap: 6,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#2C2C2C",
-  },
-  cardSubtitle: {
-    color: "#8C7C71",
-  },
-  pillRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginTop: 10,
-  },
-  pill: {
-    backgroundColor: "#F4F1EA",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  pillText: {
-    color: "#2C2C2C",
-    fontWeight: "600",
-  },
-  metaText: {
-    color: "#6B5E55",
-  },
-  actionsRow: {
-    gap: 10,
-  },
-  primaryButton: {
-    backgroundColor: "#0E3A32",
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: "center",
-  },
-  primaryButtonText: {
-    color: "#FDE7C6",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  secondaryButton: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E0D6CC",
-  },
-  secondaryButtonText: {
-    color: "#1F2A24",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  dangerButton: {
-    backgroundColor: "#FEE4E2",
-    borderRadius: 16,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    alignItems: "center",
-  },
-  dangerButtonText: {
-    color: "#B42318",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  loadingWrap: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  emptyState: {
-    alignItems: "center",
-    paddingTop: 60,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#2C2C2C",
-  },
-  emptyBody: {
-    color: "#6B5E55",
-    marginTop: 6,
-  },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    padding: 20,
-  },
-  modalCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 18,
-    gap: 12,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#2C2C2C",
-  },
-  modalLabel: {
-    color: "#6B5E55",
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#D8CEC4",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: "#FFFFFF",
-    color: "#1F2A24",
-  },
-});
+// Map everything to the new dynamic colors context
+const createStyles = (colors: any) =>
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+    headerRow: {
+      padding: 20,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    backButton: {
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+      backgroundColor: colors.surface1,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    backButtonText: {
+      color: colors.text1,
+      fontWeight: "600",
+    },
+    headerSpacer: {
+      width: 50,
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: colors.text1,
+    },
+    content: {
+      paddingHorizontal: 20,
+      paddingBottom: 30,
+      gap: 16,
+    },
+    card: {
+      backgroundColor: colors.surface1,
+      borderRadius: 18,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: 6,
+    },
+    cardTitle: {
+      fontSize: 20, // Slightly bumped up to align with modern editorial sizing
+      fontWeight: "700",
+      color: colors.text1,
+    },
+    cardSubtitle: {
+      color: colors.text2,
+    },
+    pillRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginTop: 10,
+    },
+    pill: {
+      backgroundColor: colors.surface2,
+      borderRadius: 999,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    pillText: {
+      color: colors.text1,
+      fontWeight: "600",
+    },
+    metaText: {
+      color: colors.text2,
+    },
+    actionsRow: {
+      gap: 10,
+    },
+    primaryButton: {
+      backgroundColor: colors.accent1, // Brand Green
+      borderRadius: 16,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      alignItems: "center",
+    },
+    primaryButtonText: {
+      color: colors.bg, // Automatically flips text color for contrast
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    secondaryButton: {
+      backgroundColor: colors.surface1,
+      borderRadius: 16,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    secondaryButtonText: {
+      color: colors.text1,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    dangerButton: {
+      backgroundColor: colors.surface2, // Use neutral surface with danger text for minimal feel
+      borderRadius: 16,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      alignItems: "center",
+    },
+    dangerButtonText: {
+      color: colors.danger,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    loadingWrap: {
+      flex: 1,
+      justifyContent: "center",
+    },
+    emptyState: {
+      alignItems: "center",
+      paddingTop: 60,
+    },
+    emptyTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: colors.text1,
+    },
+    emptyBody: {
+      color: colors.text2,
+      marginTop: 6,
+    },
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.5)", // Darkened slightly for better pure black contrast
+      justifyContent: "center",
+      padding: 20,
+    },
+    modalCard: {
+      backgroundColor: colors.surface1,
+      borderRadius: 18,
+      padding: 18,
+      gap: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    modalTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: colors.text1,
+    },
+    modalLabel: {
+      color: colors.text2,
+    },
+    modalActions: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      gap: 12,
+      marginTop: 8,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 12, // Increased touch target size
+      backgroundColor: colors.surface1,
+      color: colors.text1,
+    },
+  });

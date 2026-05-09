@@ -1,5 +1,5 @@
 import { Link, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,8 +11,14 @@ import {
   View,
 } from "react-native";
 import { API_BASE_URL } from "@/constants/api";
+import { Colors } from "@/constants/theme";
+import { useTheme } from "@/context/theme";
+import ThemeToggle from "@/components/theme-toggle";
 
 export default function LoginScreen() {
+  const { scheme } = useTheme();
+  const palette = Colors[scheme];
+  const styles = useMemo(() => createStyles(palette), [palette]);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -55,6 +61,9 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
+        <View style={styles.topRow}>
+          <ThemeToggle />
+        </View>
         <Text style={styles.title}>Welcome back</Text>
         <Text style={styles.subtitle}>
           Log in to manage your smart grocery plan.
@@ -66,7 +75,7 @@ export default function LoginScreen() {
             value={username}
             onChangeText={setUsername}
             placeholder="Username or email"
-            placeholderTextColor="#9C9085"
+            placeholderTextColor={palette.muted}
             autoCapitalize="none"
             style={styles.input}
           />
@@ -78,7 +87,7 @@ export default function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             placeholder="Enter your password"
-            placeholderTextColor="#9C9085"
+            placeholderTextColor={palette.muted}
             secureTextEntry
             style={styles.input}
           />
@@ -95,7 +104,7 @@ export default function LoginScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#FDE7C6" />
+            <ActivityIndicator color={palette.background} />
           ) : (
             <Text style={styles.primaryButtonText}>Log in</Text>
           )}
@@ -116,76 +125,80 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F4F1EA",
-  },
-  container: {
-    padding: 24,
-    gap: 18,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#1F2A24",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#6B5E55",
-  },
-  fieldGroup: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#52453D",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#D8CEC4",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: "#FFFFFF",
-    color: "#1F2A24",
-  },
-  primaryButton: {
-    backgroundColor: "#0E3A32",
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  primaryButtonDisabled: {
-    opacity: 0.7,
-  },
-  primaryButtonText: {
-    color: "#FDE7C6",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  errorText: {
-    color: "#B42318",
-    backgroundColor: "#FEE4E2",
-    borderRadius: 12,
-    padding: 10,
-    fontSize: 12,
-  },
-  footerRow: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-  },
-  footerText: {
-    color: "#6B5E55",
-  },
-  footerLink: {
-    color: "#0E3A32",
-    fontWeight: "600",
-  },
-  backLink: {
-    marginTop: 12,
-    color: "#8C7C71",
-  },
-});
+const createStyles = (palette: typeof Colors.light) =>
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: palette.background,
+    },
+    container: {
+      padding: 24,
+      gap: 18,
+    },
+    topRow: {
+      alignItems: "flex-end",
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: "700",
+      color: palette.text,
+    },
+    subtitle: {
+      fontSize: 14,
+      color: palette.muted,
+    },
+    fieldGroup: {
+      gap: 8,
+    },
+    label: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: palette.text,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      backgroundColor: palette.surface,
+      color: palette.text,
+    },
+    primaryButton: {
+      backgroundColor: palette.accent,
+      borderRadius: 16,
+      paddingVertical: 12,
+      alignItems: "center",
+    },
+    primaryButtonDisabled: {
+      opacity: 0.7,
+    },
+    primaryButtonText: {
+      color: palette.background,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    errorText: {
+      color: palette.danger,
+      backgroundColor: palette.surfaceAlt,
+      borderRadius: 12,
+      padding: 10,
+      fontSize: 12,
+    },
+    footerRow: {
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+    },
+    footerText: {
+      color: palette.muted,
+    },
+    footerLink: {
+      color: palette.accent,
+      fontWeight: "600",
+    },
+    backLink: {
+      marginTop: 12,
+      color: palette.muted,
+    },
+  });

@@ -12,8 +12,14 @@ import {
   View,
 } from "react-native";
 import { API_BASE_URL } from "@/constants/api";
+import { Colors } from "@/constants/theme";
+import { useTheme } from "@/context/theme";
+import ThemeToggle from "@/components/theme-toggle";
 
 export default function RegisterScreen() {
+  const { scheme } = useTheme();
+  const palette = Colors[scheme];
+  const styles = useMemo(() => createStyles(palette), [palette]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -77,6 +83,9 @@ export default function RegisterScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.container}>
+        <View style={styles.topRow}>
+          <ThemeToggle />
+        </View>
         <Text style={styles.title}>Create your account</Text>
         <Text style={styles.subtitle}>
           Join Smart Grocery and start saving today.
@@ -88,7 +97,7 @@ export default function RegisterScreen() {
             value={name}
             onChangeText={setName}
             placeholder="Your username"
-            placeholderTextColor="#9C9085"
+            placeholderTextColor={palette.muted}
             style={styles.input}
           />
         </View>
@@ -99,7 +108,7 @@ export default function RegisterScreen() {
             value={email}
             onChangeText={setEmail}
             placeholder="you@example.com"
-            placeholderTextColor="#9C9085"
+            placeholderTextColor={palette.muted}
             keyboardType="email-address"
             autoCapitalize="none"
             style={styles.input}
@@ -112,7 +121,7 @@ export default function RegisterScreen() {
             value={householdSize}
             onChangeText={setHouseholdSize}
             placeholder="1"
-            placeholderTextColor="#9C9085"
+            placeholderTextColor={palette.muted}
             keyboardType="number-pad"
             style={styles.input}
           />
@@ -149,7 +158,7 @@ export default function RegisterScreen() {
             value={password}
             onChangeText={setPassword}
             placeholder="Create a password"
-            placeholderTextColor="#9C9085"
+            placeholderTextColor={palette.muted}
             secureTextEntry
             style={styles.input}
           />
@@ -166,7 +175,7 @@ export default function RegisterScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#2D1D12" />
+            <ActivityIndicator color={palette.background} />
           ) : (
             <Text style={styles.primaryButtonText}>Create account</Text>
           )}
@@ -187,101 +196,105 @@ export default function RegisterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#F4F1EA",
-  },
-  container: {
-    padding: 24,
-    gap: 18,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: "700",
-    color: "#1F2A24",
-  },
-  subtitle: {
-    fontSize: 14,
-    color: "#6B5E55",
-  },
-  fieldGroup: {
-    gap: 8,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#52453D",
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#D8CEC4",
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: "#FFFFFF",
-    color: "#1F2A24",
-  },
-  dietRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  dietPill: {
-    borderWidth: 1,
-    borderColor: "#D8CEC4",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#FFFFFF",
-  },
-  dietPillActive: {
-    backgroundColor: "#0E3A32",
-    borderColor: "#0E3A32",
-  },
-  dietPillText: {
-    color: "#4A4038",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  dietPillTextActive: {
-    color: "#FDE7C6",
-  },
-  primaryButton: {
-    backgroundColor: "#F49E4C",
-    borderRadius: 16,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  primaryButtonDisabled: {
-    opacity: 0.7,
-  },
-  primaryButtonText: {
-    color: "#2D1D12",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  errorText: {
-    color: "#B42318",
-    backgroundColor: "#FEE4E2",
-    borderRadius: 12,
-    padding: 10,
-    fontSize: 12,
-  },
-  footerRow: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-  },
-  footerText: {
-    color: "#6B5E55",
-  },
-  footerLink: {
-    color: "#0E3A32",
-    fontWeight: "600",
-  },
-  backLink: {
-    marginTop: 12,
-    color: "#8C7C71",
-  },
-});
+const createStyles = (palette: typeof Colors.light) =>
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: palette.background,
+    },
+    container: {
+      padding: 24,
+      gap: 18,
+    },
+    topRow: {
+      alignItems: "flex-end",
+    },
+    title: {
+      fontSize: 26,
+      fontWeight: "700",
+      color: palette.text,
+    },
+    subtitle: {
+      fontSize: 14,
+      color: palette.muted,
+    },
+    fieldGroup: {
+      gap: 8,
+    },
+    label: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: palette.text,
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      backgroundColor: palette.surface,
+      color: palette.text,
+    },
+    dietRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    dietPill: {
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 999,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: palette.surface,
+    },
+    dietPillActive: {
+      backgroundColor: palette.accent,
+      borderColor: palette.accent,
+    },
+    dietPillText: {
+      color: palette.text,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    dietPillTextActive: {
+      color: palette.background,
+    },
+    primaryButton: {
+      backgroundColor: palette.accentAlt,
+      borderRadius: 16,
+      paddingVertical: 12,
+      alignItems: "center",
+    },
+    primaryButtonDisabled: {
+      opacity: 0.7,
+    },
+    primaryButtonText: {
+      color: palette.background,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    errorText: {
+      color: palette.danger,
+      backgroundColor: palette.surfaceAlt,
+      borderRadius: 12,
+      padding: 10,
+      fontSize: 12,
+    },
+    footerRow: {
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+    },
+    footerText: {
+      color: palette.muted,
+    },
+    footerLink: {
+      color: palette.accent,
+      fontWeight: "600",
+    },
+    backLink: {
+      marginTop: 12,
+      color: palette.muted,
+    },
+  });

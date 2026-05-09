@@ -14,14 +14,14 @@ const RecipesPage = () => {
   }, [userId, navigate]);
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans">
+    <div className="min-h-screen theme-bg font-sans">
       <Navbar user={user} />
 
       <div className="max-w-7xl mx-auto px-6 py-10">
         {/* Back Button */}
         <button
           onClick={() => navigate("/dashboard")}
-          className="flex items-center text-zinc-400 hover:text-white mb-6 transition group"
+          className="flex items-center text-[var(--text-2)] hover:text-[var(--text-1)] mb-6 transition group"
         >
           <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
           Back to Dashboard
