@@ -15,6 +15,10 @@ function RootStack() {
         <Stack.Screen name="home" />
         <Stack.Screen name="products" />
         <Stack.Screen name="product" />
+        <Stack.Screen name="market-price" />
+        <Stack.Screen name="shopping-list" />
+        <Stack.Screen name="forecast" />
+        <Stack.Screen name="analytics" />
         <Stack.Screen name="recipes" />
       </Stack>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />

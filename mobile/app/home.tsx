@@ -41,7 +41,12 @@ type BudgetStatus = {
   advice?: string;
 };
 
-type QuickActionKey = "recipes" | "prices" | "shopping" | "forecast";
+type QuickActionKey =
+  | "recipes"
+  | "prices"
+  | "shopping"
+  | "forecast"
+  | "analytics";
 
 export default function HomeScreen() {
   // Pull the active high-end minimal colors directly from the context
@@ -197,7 +202,10 @@ export default function HomeScreen() {
   const totalItems = products.length;
   const lowStockCount = useMemo(() => {
     return products.filter(
-      (item) => item.days_left !== -1 && item.days_left < 3,
+      (item) =>
+        item.days_left !== undefined &&
+        item.days_left !== -1 &&
+        item.days_left < 3,
     ).length;
   }, [products]);
 
@@ -210,15 +218,31 @@ export default function HomeScreen() {
       return;
     }
     if (key === "prices") {
-      Alert.alert("Prices", "Coming soon on mobile.");
+      router.push({
+        pathname: "/market-price",
+        params: { userId: String(userId), name: displayName ?? "" },
+      });
       return;
     }
     if (key === "shopping") {
-      Alert.alert("Shopping list", "Coming soon on mobile.");
+      router.push({
+        pathname: "/shopping-list",
+        params: { userId: String(userId), name: displayName ?? "" },
+      });
       return;
     }
     if (key === "forecast") {
-      Alert.alert("Forecast", "Coming soon on mobile.");
+      router.push({
+        pathname: "/forecast",
+        params: { userId: String(userId), name: displayName ?? "" },
+      });
+      return;
+    }
+    if (key === "analytics") {
+      router.push({
+        pathname: "/analytics",
+        params: { userId: String(userId), name: displayName ?? "" },
+      });
     }
   };
 
@@ -271,7 +295,7 @@ export default function HomeScreen() {
               params: { userId: String(userId), name: displayName ?? "" },
             })
           }
-          onPressProduct={(product) =>
+          onPressProduct={(product: Product) =>
             router.push({
               pathname: "/product",
               params: {

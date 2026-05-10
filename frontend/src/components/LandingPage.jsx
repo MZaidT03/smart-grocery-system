@@ -208,7 +208,9 @@ const LandingPage = () => {
           </p>
           <div className="flex items-center justify-center space-x-2 text-sm text-zinc-600">
             <span>Project by</span>
-            <span className="text-amber-500/80 font-medium">M Zaid Tahir</span>
+            <span className="text-amber-500/80 font-medium">
+              M Zaid Tahir | Roman Fatima | Danish Imran
+            </span>
             <span>|</span>
             <span className="text-zinc-500">CodeInn' Tech</span>
           </div>
