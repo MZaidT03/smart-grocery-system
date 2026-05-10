@@ -275,6 +275,12 @@ export default function HomeScreen() {
           lowStockCount={lowStockCount}
           budgetStatus={budget?.status}
           onAddPress={() => setShowAddModal(true)}
+          onProfilePress={() =>
+            router.push({
+              pathname: "/profile",
+              params: { userId: String(userId), name: displayName ?? "" },
+            })
+          }
         />
 
         <QuickActions onAction={handleQuickAction} />
