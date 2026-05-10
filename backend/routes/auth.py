@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 import sqlite3
 from database import get_db_connection
-from utils import hash_password, safe_float
+from utils import hash_password, safe_float, verify_password
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -51,10 +51,10 @@ def login():
     try:
         user = conn.execute("""
             SELECT * FROM users 
-            WHERE (username=? OR email=?) AND password_hash=?
-        """, (username_input, username_input, hash_password(password_input))).fetchone()
+            WHERE (username=? OR email=?)
+        """, (username_input, username_input)).fetchone()
         
-        if not user: 
+        if not user or not verify_password(user['password_hash'], password_input): 
             return jsonify({"success": False, "message": "Invalid credentials"}), 401
         
         u = dict(user)

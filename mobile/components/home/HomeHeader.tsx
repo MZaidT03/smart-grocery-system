@@ -9,6 +9,7 @@ export default function HomeHeader({
   lowStockCount,
   budgetStatus,
   onAddPress,
+  onProfilePress,
 }: any) {
   // Pull the pure black/white/green minimal colors directly from the context
   const { mode, setMode, scheme, colors } = useTheme();
@@ -34,13 +35,18 @@ export default function HomeHeader({
         </View>
 
         <View style={styles.actionColumn}>
-          <Pressable style={styles.iconButton} onPress={toggleMode}>
-            <Feather
-              name={scheme === "dark" ? "moon" : "sun"}
-              size={18}
-              color={colors.text1} // Adapts perfectly to theme
-            />
-          </Pressable>
+          <View style={{flexDirection: 'row', gap: 8}}>
+            <Pressable style={styles.iconButton} onPress={onProfilePress}>
+              <Feather name="user" size={18} color={colors.text1} />
+            </Pressable>
+            <Pressable style={styles.iconButton} onPress={toggleMode}>
+              <Feather
+                name={scheme === "dark" ? "moon" : "sun"}
+                size={18}
+                color={colors.text1} // Adapts perfectly to theme
+              />
+            </Pressable>
+          </View>
           <Pressable style={styles.addButton} onPress={onAddPress}>
             <Text style={styles.addButtonText}>Add item</Text>
           </Pressable>
