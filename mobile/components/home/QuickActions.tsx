@@ -72,6 +72,23 @@ const buildActions = (scheme: "light" | "dark") => [
             accent: "#8b5cf6",
           },
   },
+  {
+    key: "analytics",
+    title: "Analytics",
+    subtitle: "Insights & trends",
+    tone:
+      scheme === "dark"
+        ? {
+            bg: "rgba(236, 72, 153, 0.1)",
+            border: "rgba(236, 72, 153, 0.5)",
+            accent: "#f472b6",
+          } // Pink
+        : {
+            bg: "rgba(236, 72, 153, 0.08)",
+            border: "rgba(236, 72, 153, 0.4)",
+            accent: "#ec4899",
+          },
+  },
 ];
 
 export default function QuickActions({ onAction }: any) {
