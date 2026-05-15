@@ -1,5 +1,5 @@
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   Pressable,
@@ -90,17 +90,19 @@ export default function HomeScreen() {
     return Array.from(new Set(values)).slice(0, 8);
   }, [catalog]);
 
-  useEffect(() => {
-    if (!userId) {
-      return;
-    }
-    const load = async () => {
-      setLoading(true);
-      await Promise.all([fetchProducts(), fetchCatalog(), fetchBudget()]);
-      setLoading(false);
-    };
-    load();
-  }, [userId, refreshTrigger]);
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) {
+        return;
+      }
+      const load = async () => {
+        setLoading(true);
+        await Promise.all([fetchProducts(), fetchCatalog(), fetchBudget()]);
+        setLoading(false);
+      };
+      load();
+    }, [userId, refreshTrigger])
+  );
 
   const fetchProducts = async () => {
     if (!userId) return;

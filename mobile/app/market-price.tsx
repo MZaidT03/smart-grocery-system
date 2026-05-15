@@ -5,12 +5,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Pressable,
   RefreshControl,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import {
@@ -20,7 +21,13 @@ import {
   AlertCircle,
   Tag,
   BarChart3,
+  Search,
+  CheckCircle2,
+  Circle,
+  DollarSign,
 } from "lucide-react-native";
+import PricePreviewModal, { PricePreviewItem } from "@/components/market-price/PricePreviewModal";
+import ScrapeOptionsModal from "@/components/market-price/ScrapeOptionsModal";
 
 type Product = {
   id: number | string;
@@ -44,14 +51,19 @@ export default function MarketPriceScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
   const params = useLocalSearchParams();
-  const userId = Array.isArray(params.userId)
-    ? params.userId[0]
-    : params.userId;
+  const userId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
 
   const [items, setItems] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [isScraping, setIsScraping] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
+  const [optionsModalVisible, setOptionsModalVisible] = useState(false);
+  const [previewModalVisible, setPreviewModalVisible] = useState(false);
+  const [previewResults, setPreviewResults] = useState<PricePreviewItem[]>([]);
+  const [savingPrices, setSavingPrices] = useState(false);
 
   const fetchPrices = async (isRefresh = false) => {
     if (!userId) {
@@ -59,11 +71,8 @@ export default function MarketPriceScreen() {
       return;
     }
 
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
 
     try {
       const res = await fetch(`${API_BASE_URL}/products?userId=${userId}`);
@@ -83,26 +92,16 @@ export default function MarketPriceScreen() {
 
   const stats = useMemo(() => {
     const validItems = items.filter((item) => Number(item.price) > 0);
-    if (!validItems.length) {
-      return null;
-    }
+    if (!validItems.length) return null;
 
-    const totalValue = validItems.reduce(
-      (sum, item) => sum + Number(item.price),
-      0,
-    );
+    const totalValue = validItems.reduce((sum, item) => sum + Number(item.price), 0);
     const avgPrice = totalValue / validItems.length;
-    const mostExpensive = [...validItems].sort(
-      (a, b) => Number(b.price) - Number(a.price),
-    )[0];
+    const mostExpensive = [...validItems].sort((a, b) => Number(b.price) - Number(a.price))[0];
 
-    const groupedByCategory: Record<string, { sum: number; count: number }> =
-      {};
+    const groupedByCategory: Record<string, { sum: number; count: number }> = {};
     validItems.forEach((item) => {
       const key = item.category || "Other";
-      if (!groupedByCategory[key]) {
-        groupedByCategory[key] = { sum: 0, count: 0 };
-      }
+      if (!groupedByCategory[key]) groupedByCategory[key] = { sum: 0, count: 0 };
       groupedByCategory[key].sum += Number(item.price);
       groupedByCategory[key].count += 1;
     });
@@ -110,12 +109,10 @@ export default function MarketPriceScreen() {
     const categoryData: CategoryStat[] = Object.keys(groupedByCategory)
       .map((name) => ({
         name,
-        avgPrice: Math.round(
-          groupedByCategory[name].sum / groupedByCategory[name].count,
-        ),
+        avgPrice: Math.round(groupedByCategory[name].sum / groupedByCategory[name].count),
       }))
       .sort((a, b) => b.avgPrice - a.avgPrice)
-      .slice(0, 6); // Limit to top 6 for a cleaner UI
+      .slice(0, 6);
 
     const ranges: RangeStat[] = [
       { name: "0-300", count: 0 },
@@ -132,54 +129,71 @@ export default function MarketPriceScreen() {
       else ranges[3].count += 1;
     });
 
-    return {
-      totalValue,
-      avgPrice,
-      mostExpensive,
-      categoryData,
-      ranges,
-    };
+    return { totalValue, avgPrice, mostExpensive, categoryData, ranges };
   }, [items]);
+
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+    return items.filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [items, searchQuery]);
+
+  const toggleSelection = (id: number) => {
+    setSelectedItemIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+  };
 
   const handleLiveUpdate = () => {
     if (!userId || isScraping) return;
+    setOptionsModalVisible(true);
+  };
 
-    Alert.alert(
-      "Scrape Live Prices?",
-      "This will scan the market for updated prices on your current products.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Scan Market",
-          onPress: async () => {
-            setIsScraping(true);
-            try {
-              const res = await fetch(
-                `${API_BASE_URL}/analytics/fetch-live-prices`,
-                {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ userId }),
-                },
-              );
-              const data = await res.json();
-              if (data?.success) {
-                fetchPrices(true);
-              } else {
-                Alert.alert(
-                  "Update failed",
-                  data?.message || "Please try again.",
-                );
-              }
-            } catch (err) {
-              Alert.alert("Update failed", "Could not fetch live prices.");
-            } finally {
-              setIsScraping(false);
-            }
-          },
-        },
-      ],
-    );
+  const performScrape = async (zeroPriceOnly: boolean, itemIds: number[]) => {
+    setIsScraping(true);
+    setOptionsModalVisible(false);
+    try {
+      const res = await fetch(`${API_BASE_URL}/analytics/fetch-live-prices-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, itemIds, zeroPriceOnly }),
+      });
+      const data = await res.json();
+      if (data?.success) {
+        setPreviewResults(data.results || []);
+        if (data.results?.length > 0) {
+          setPreviewModalVisible(true);
+        } else {
+          Alert.alert("No results", "Could not find market prices for the requested products.");
+        }
+      } else {
+        Alert.alert("Scan failed", data?.message || "Could not fetch prices.");
+      }
+    } catch (err) {
+      Alert.alert("Error", "Server error. Try again.");
+    } finally {
+      setIsScraping(false);
+    }
+  };
+
+  const handleSavePrices = async (updates: PricePreviewItem[]) => {
+    setSavingPrices(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/analytics/save-live-prices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, updates }),
+      });
+      const data = await res.json();
+      if (data?.success) {
+        setPreviewModalVisible(false);
+        setSelectedItemIds([]);
+        fetchPrices(true);
+      } else {
+        Alert.alert("Save failed", data?.message || "Could not save prices.");
+      }
+    } catch (err) {
+      Alert.alert("Error", "Server error while saving.");
+    } finally {
+      setSavingPrices(false);
+    }
   };
 
   if (!userId) {
@@ -189,10 +203,7 @@ export default function MarketPriceScreen() {
           <AlertCircle size={48} color={colors.text3} />
           <Text style={styles.emptyTitle}>Session expired</Text>
           <Text style={styles.emptyBody}>Please log in again to continue.</Text>
-          <Pressable
-            style={styles.primaryButton}
-            onPress={() => router.replace("/login")}
-          >
+          <Pressable style={styles.primaryButton} onPress={() => router.replace("/login")}>
             <Text style={styles.primaryButtonText}>Go to login</Text>
           </Pressable>
         </View>
@@ -200,219 +211,219 @@ export default function MarketPriceScreen() {
     );
   }
 
+  const renderDashboardHeader = () => (
+    <View style={styles.dashboardHeader}>
+      {/* Intro & Scrape Button */}
+      <View style={styles.introWrap}>
+        <Text style={styles.introSubtitle}>Live pricing data & analytics from</Text>
+        <Text style={styles.introHighlight}>Al-Fatah Online</Text>
+
+        <Pressable
+          style={[styles.scrapeButton, isScraping && styles.disabledButton]}
+          onPress={handleLiveUpdate}
+          disabled={isScraping}
+        >
+          <RefreshCw size={18} color="#fff" style={isScraping ? styles.spinningIcon : {}} />
+          <Text style={styles.scrapeButtonText}>
+            {isScraping ? "Scanning Market..." : "Scrape Live Prices"}
+          </Text>
+        </Pressable>
+      </View>
+
+      {stats ? (
+        <>
+          {/* Quick Stats Grid */}
+          <View style={styles.kpiGrid}>
+            <View style={styles.kpiRow}>
+              <View style={styles.kpiBox}>
+                <View style={styles.kpiHeader}>
+                  <Tag size={14} color={colors.text3} />
+                  <Text style={styles.kpiLabel}>AVG. ITEM PRICE</Text>
+                </View>
+                <Text style={styles.kpiValue}>Rs {Math.round(stats.avgPrice).toLocaleString()}</Text>
+              </View>
+
+              <View style={styles.kpiBox}>
+                <View style={styles.kpiHeader}>
+                  <TrendingUp size={14} color={colors.text3} />
+                  <Text style={styles.kpiLabel}>MOST EXPENSIVE</Text>
+                </View>
+                <Text style={styles.kpiValueName} numberOfLines={1}>{stats.mostExpensive?.name}</Text>
+                <Text style={styles.kpiValueSmall}>Rs {Number(stats.mostExpensive?.price || 0).toLocaleString()}</Text>
+              </View>
+            </View>
+
+            <View style={styles.kpiHeroBox}>
+              <View style={styles.kpiHeader}>
+                <BarChart3 size={14} color={colors.text3} />
+                <Text style={styles.kpiLabel}>MARKET BASKET VALUE</Text>
+              </View>
+              <Text style={styles.kpiValueEmerald}>Rs {Math.round(stats.totalValue).toLocaleString()}</Text>
+              <Text style={styles.kpiSubText}>Total cost to buy 1 of everything</Text>
+            </View>
+          </View>
+
+          {/* Chart 1: Average Price by Category */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Average Price by Category</Text>
+            <View style={styles.barChartContainer}>
+              {stats.categoryData.map((row) => {
+                const max = Math.max(...stats.categoryData.map((item) => item.avgPrice), 1);
+                const widthPercent = Math.max((row.avgPrice / max) * 100, 2);
+                return (
+                  <View key={row.name} style={styles.barChartRow}>
+                    <View style={styles.barChartLabels}>
+                      <Text style={styles.barCategoryLabel} numberOfLines={1}>{row.name}</Text>
+                      <Text style={styles.barPriceLabel}>Rs {row.avgPrice}</Text>
+                    </View>
+                    <View style={styles.barTrack}>
+                      <View style={[styles.barFillEmerald, { width: `${widthPercent}%` }]} />
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+
+          {/* Chart 2: Price Distribution (Histogram) */}
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Price Distribution</Text>
+            <View style={styles.columnChartContainer}>
+              {stats.ranges.map((bucket) => {
+                const max = Math.max(...stats.ranges.map((item) => item.count), 1);
+                const heightPercent = Math.max((bucket.count / max) * 100, 2); // Min 2% so empty bars show slightly
+                return (
+                  <View key={bucket.name} style={styles.columnWrap}>
+                    <Text style={styles.columnValue}>{bucket.count}</Text>
+                    <View style={styles.columnTrack}>
+                      <View style={[styles.columnFillAmber, { height: `${heightPercent}%` }]} />
+                    </View>
+                    <Text style={styles.columnLabel}>{bucket.name}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        </>
+      ) : (
+        <View style={styles.emptyStateCard}>
+          <BarChart3 size={48} color={colors.surface3} />
+          <Text style={styles.emptyTitle}>No insights available</Text>
+          <Text style={styles.emptyBody}>
+            Add products to your inventory and run live scraping to generate analytics.
+          </Text>
+        </View>
+      )}
+
+      {/* List Header & Search Bar */}
+      <View style={styles.listHeaderWrap}>
+        <View style={styles.listHeaderTitleRow}>
+          <Text style={styles.sectionTitle}>Live Price Feed</Text>
+          {selectedItemIds.length > 0 && (
+            <Text style={styles.selectedCountText}>{selectedItemIds.length} selected</Text>
+          )}
+        </View>
+        <View style={styles.searchWrap}>
+          <Search size={18} color={colors.text3} style={styles.searchIcon} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search items..."
+            placeholderTextColor={colors.text3}
+            style={styles.searchInput}
+          />
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header */}
+      {/* App Header (Fixed) */}
       <View style={styles.headerRow}>
         <Pressable onPress={() => router.back()} style={styles.iconButton}>
           <ArrowLeft size={24} color={colors.text1} />
         </Pressable>
-        <Text style={styles.title}>Market Intelligence</Text>
+        <View style={styles.headerTitleWrap}>
+          <DollarSign size={20} color="#10B981" />
+          <Text style={styles.title}>Market Intelligence</Text>
+        </View>
         <View style={styles.headerSpacer} />
       </View>
 
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={colors.accent1} />
+          <ActivityIndicator size="large" color="#10B981" />
         </View>
       ) : (
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
+        <FlatList
+          data={filteredItems}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={styles.flatListContent}
+          showsVerticalScrollIndicator={true}
+          indicatorStyle="white"
+          ListHeaderComponent={renderDashboardHeader}
           refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => fetchPrices(true)}
-              tintColor={colors.accent1}
-            />
+            <RefreshControl refreshing={refreshing} onRefresh={() => fetchPrices(true)} tintColor="#10B981" />
           }
-        >
-          {stats ? (
-            <>
-              {/* Hero Dashboard */}
-              <View style={styles.heroCard}>
-                <Text style={styles.heroLabel}>Total Basket Value</Text>
-                <Text style={styles.heroValue}>
-                  Rs {Math.round(stats.totalValue).toLocaleString()}
-                </Text>
+          renderItem={({ item }) => {
+            const itemId = Number(item.id);
+            const isSelected = selectedItemIds.includes(itemId);
 
-                <Pressable
-                  style={[
-                    styles.scrapeButton,
-                    isScraping && styles.disabledButton,
-                  ]}
-                  onPress={handleLiveUpdate}
-                  disabled={isScraping}
-                >
-                  <RefreshCw
-                    size={18}
-                    color={colors.bg}
-                    style={isScraping ? styles.spinningIcon : {}}
-                  />
-                  <Text style={styles.scrapeButtonText}>
-                    {isScraping ? "Scanning Market..." : "Scrape Live Prices"}
-                  </Text>
-                </Pressable>
-              </View>
-
-              {/* Quick Stats Grid */}
-              <View style={styles.kpiRow}>
-                <View style={styles.kpiBox}>
-                  <View style={styles.kpiIconWrap}>
-                    <TrendingUp size={16} color={colors.accent1} />
-                  </View>
-                  <Text style={styles.kpiLabel}>Average Price</Text>
-                  <Text style={styles.kpiValue}>
-                    Rs {Math.round(stats.avgPrice).toLocaleString()}
-                  </Text>
-                </View>
-
-                <View style={styles.kpiBox}>
-                  <View style={styles.kpiIconWrap}>
-                    <Tag size={16} color={colors.accent1} />
-                  </View>
-                  <Text style={styles.kpiLabel}>Most Expensive</Text>
-                  <Text style={styles.kpiValue} numberOfLines={1}>
-                    Rs{" "}
-                    {Number(stats.mostExpensive?.price || 0).toLocaleString()}
-                  </Text>
-                  <Text style={styles.kpiSubText} numberOfLines={1}>
-                    {stats.mostExpensive?.name}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Proper Vertical Column Chart (Price Distribution) */}
-              <View style={styles.sectionCard}>
-                <View style={styles.sectionHeader}>
-                  <BarChart3 size={20} color={colors.text1} />
-                  <Text style={styles.sectionTitle}>Price Distribution</Text>
-                </View>
-                <View style={styles.columnChartContainer}>
-                  {stats.ranges.map((bucket) => {
-                    const max = Math.max(
-                      ...stats.ranges.map((item) => item.count),
-                      1,
-                    );
-                    const heightPercent = (bucket.count / max) * 100;
-                    return (
-                      <View key={bucket.name} style={styles.columnWrap}>
-                        <Text style={styles.columnValue}>{bucket.count}</Text>
-                        <View style={styles.columnTrack}>
-                          <View
-                            style={[
-                              styles.columnFill,
-                              { height: `${heightPercent}%` },
-                            ]}
-                          />
-                        </View>
-                        <Text style={styles.columnLabel}>{bucket.name}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Horizontal Bar Chart (Categories) */}
-              <View style={styles.sectionCard}>
-                <Text style={styles.sectionTitle}>
-                  Average Price by Category
-                </Text>
-                <View style={styles.barChartContainer}>
-                  {stats.categoryData.map((row) => {
-                    const max = Math.max(
-                      ...stats.categoryData.map((item) => item.avgPrice),
-                      1,
-                    );
-                    const widthPercent = Math.max(
-                      (row.avgPrice / max) * 100,
-                      2,
-                    ); // min 2% so it's visible
-                    return (
-                      <View key={row.name} style={styles.barChartRow}>
-                        <View style={styles.barChartLabels}>
-                          <Text
-                            style={styles.barCategoryLabel}
-                            numberOfLines={1}
-                          >
-                            {row.name}
-                          </Text>
-                          <Text style={styles.barPriceLabel}>
-                            Rs {row.avgPrice}
-                          </Text>
-                        </View>
-                        <View style={styles.barTrack}>
-                          <View
-                            style={[
-                              styles.barFill,
-                              { width: `${widthPercent}%` },
-                            ]}
-                          />
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            </>
-          ) : (
-            <View style={styles.emptyStateCard}>
-              <BarChart3 size={48} color={colors.surface3} />
-              <Text style={styles.emptyTitle}>No insights available</Text>
-              <Text style={styles.emptyBody}>
-                Add products to your inventory and run live scraping to generate
-                analytics.
-              </Text>
+            return (
               <Pressable
-                style={styles.primaryButton}
-                onPress={handleLiveUpdate}
-                disabled={isScraping}
+                style={[styles.itemCard, isSelected && styles.itemCardSelected]}
+                onPress={() => toggleSelection(itemId)}
               >
-                <Text style={styles.primaryButtonText}>
-                  {isScraping ? "Scanning..." : "Scrape Market Now"}
-                </Text>
-              </Pressable>
-            </View>
-          )}
+                <View style={styles.selectionIconWrap}>
+                  {isSelected ? (
+                    <CheckCircle2 size={22} color="#10B981" />
+                  ) : (
+                    <Circle size={22} color={colors.text3} />
+                  )}
+                </View>
 
-          {/* Table / List */}
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Live Price Feed</Text>
-            <View style={styles.tableHeaderRow}>
-              <Text style={[styles.headerCell, styles.nameCell]}>Item</Text>
-              <Text style={[styles.headerCell, styles.priceCell]}>
-                Market Price
-              </Text>
-            </View>
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemCategory}>{item.category || "Uncategorized"}</Text>
+                </View>
 
-            {items.length === 0 ? (
-              <View style={styles.emptyListWrap}>
-                <Text style={styles.emptyBody}>No products tracked yet.</Text>
-              </View>
-            ) : (
-              items.map((item, index) => (
-                <View
-                  key={String(item.id)}
-                  style={[
-                    styles.tableRow,
-                    index === items.length - 1 && { borderBottomWidth: 0 },
-                  ]}
-                >
-                  <View style={styles.nameCell}>
-                    <Text style={styles.itemName}>{item.name}</Text>
-                    <Text style={styles.itemCategory}>
-                      {item.category || "Uncategorized"}
-                    </Text>
-                  </View>
-                  <Text style={styles.itemPrice}>
+                <View style={styles.itemPriceWrap}>
+                  <Text style={styles.itemPriceLabel}>Market</Text>
+                  <Text style={styles.itemPriceEmerald}>
                     Rs {Number(item.price || 0).toLocaleString()}
                   </Text>
+                  <Text style={styles.itemPriceDate}>{item.price ? "Today" : "Never"}</Text>
                 </View>
-              ))
-            )}
-          </View>
-        </ScrollView>
+              </Pressable>
+            );
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyListWrap}>
+              <Text style={styles.emptyBody}>
+                {searchQuery ? "No matching items found." : "No products tracked yet."}
+              </Text>
+            </View>
+          }
+        />
       )}
+
+      {/* Modals */}
+      <ScrapeOptionsModal
+        visible={optionsModalVisible}
+        onClose={() => setOptionsModalVisible(false)}
+        selectedCount={selectedItemIds.length}
+        onScrapeSelected={() => performScrape(false, selectedItemIds)}
+        onScrapeAll={() => performScrape(false, [])}
+      />
+
+      <PricePreviewModal
+        visible={previewModalVisible}
+        onClose={() => setPreviewModalVisible(false)}
+        results={previewResults}
+        onSave={handleSavePrices}
+        saving={savingPrices}
+      />
     </SafeAreaView>
   );
 }
@@ -432,116 +443,146 @@ const createStyles = (colors: any) =>
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
       backgroundColor: colors.bg,
+      zIndex: 10,
     },
     iconButton: {
       padding: 8,
       marginLeft: -8,
     },
+    headerTitleWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
     title: {
       fontSize: 18,
-      fontWeight: "700",
+      fontWeight: "800",
       color: colors.text1,
       letterSpacing: -0.5,
     },
     headerSpacer: {
       width: 40,
     },
-    content: {
-      padding: 20,
-      gap: 20,
-      paddingBottom: 40,
-    },
     loadingWrap: {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
     },
-    // Hero Section
-    heroCard: {
-      backgroundColor: colors.surface1,
-      borderRadius: 24,
-      padding: 24,
-      alignItems: "center",
-      borderWidth: 1,
-      borderColor: colors.border,
+
+    // FlatList container
+    flatListContent: {
+      padding: 20,
+      paddingBottom: 40,
     },
-    heroLabel: {
+    dashboardHeader: {
+      gap: 20,
+      paddingBottom: 8,
+    },
+
+    // Intro & Scrape Button
+    introWrap: {
+      marginBottom: 4,
+    },
+    introSubtitle: {
       color: colors.text2,
       fontSize: 14,
-      fontWeight: "600",
-      textTransform: "uppercase",
-      letterSpacing: 1,
-      marginBottom: 8,
     },
-    heroValue: {
-      color: colors.text1,
-      fontSize: 42,
-      fontWeight: "800",
-      letterSpacing: -1,
-      marginBottom: 24,
+    introHighlight: {
+      color: "#10B981", // Emerald
+      fontSize: 14,
+      fontWeight: "700",
+      marginBottom: 16,
     },
     scrapeButton: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: colors.accent1,
+      backgroundColor: "#059669", // Emerald 600
       paddingVertical: 14,
       paddingHorizontal: 24,
-      borderRadius: 100, // Pill shape
+      borderRadius: 14,
       width: "100%",
       gap: 8,
+      shadowColor: "#10B981",
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.2,
+      shadowRadius: 8,
+      elevation: 4,
     },
     scrapeButtonText: {
-      color: colors.bg,
-      fontSize: 16,
+      color: "#fff",
+      fontSize: 15,
       fontWeight: "700",
     },
     spinningIcon: {
-      // In a real app, add a react-native-reanimated rotation here
       opacity: 0.8,
     },
     disabledButton: {
       opacity: 0.6,
     },
-    // KPI Row
+
+    // KPI Grid
+    kpiGrid: {
+      gap: 12,
+    },
     kpiRow: {
       flexDirection: "row",
-      gap: 16,
+      gap: 12,
     },
     kpiBox: {
       flex: 1,
       backgroundColor: colors.surface1,
-      borderRadius: 20,
+      borderRadius: 16,
       padding: 16,
       borderWidth: 1,
       borderColor: colors.border,
     },
-    kpiIconWrap: {
-      width: 32,
-      height: 32,
-      borderRadius: 10,
-      backgroundColor: colors.surface2,
+    kpiHeroBox: {
+      backgroundColor: colors.surface1,
+      borderRadius: 16,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    kpiHeader: {
+      flexDirection: "row",
       alignItems: "center",
-      justifyContent: "center",
-      marginBottom: 12,
+      gap: 6,
+      marginBottom: 10,
     },
     kpiLabel: {
-      color: colors.text2,
-      fontSize: 13,
-      fontWeight: "600",
-      marginBottom: 4,
+      color: colors.text3,
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.5,
     },
     kpiValue: {
       color: colors.text1,
-      fontSize: 20,
+      fontSize: 22,
+      fontWeight: "800",
+    },
+    kpiValueName: {
+      color: colors.text1,
+      fontSize: 16,
       fontWeight: "700",
     },
-    kpiSubText: {
-      color: colors.accent1,
-      fontSize: 12,
-      fontWeight: "600",
+    kpiValueSmall: {
+      color: "#10B981", // Emerald
+      fontSize: 13,
+      fontWeight: "700",
       marginTop: 2,
     },
+    kpiValueEmerald: {
+      color: "#10B981",
+      fontSize: 32,
+      fontWeight: "800",
+    },
+    kpiSubText: {
+      color: colors.text3,
+      fontSize: 12,
+      marginTop: 4,
+    },
+
     // Section Cards
     sectionCard: {
       backgroundColor: colors.surface1,
@@ -551,60 +592,56 @@ const createStyles = (colors: any) =>
       borderColor: colors.border,
       gap: 16,
     },
-    sectionHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-    },
     sectionTitle: {
       color: colors.text1,
-      fontSize: 18,
+      fontSize: 17,
       fontWeight: "700",
-      letterSpacing: -0.3,
     },
-    // Column Chart (Vertical Bars)
+
+    // Column Chart (Vertical Bars / Histogram)
     columnChartContainer: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-end",
-      height: 180,
+      height: 160,
       marginTop: 10,
-      paddingHorizontal: 10,
+      paddingHorizontal: 4,
     },
     columnWrap: {
       alignItems: "center",
       flex: 1,
       height: "100%",
       justifyContent: "flex-end",
-      gap: 8,
+      gap: 6,
     },
     columnValue: {
       color: colors.text2,
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: "700",
     },
     columnTrack: {
-      width: 36,
+      width: "100%",
+      maxWidth: 32,
       flex: 1,
       backgroundColor: colors.surface2,
-      borderRadius: 8,
+      borderRadius: 6,
       justifyContent: "flex-end",
       overflow: "hidden",
     },
-    columnFill: {
+    columnFillAmber: {
       width: "100%",
-      backgroundColor: colors.accent1,
-      borderRadius: 8,
+      backgroundColor: "#F59E0B", // Amber
+      borderRadius: 6,
     },
     columnLabel: {
-      color: colors.text2,
-      fontSize: 11,
+      color: colors.text3,
+      fontSize: 10,
       fontWeight: "600",
     },
+
     // Bar Chart (Horizontal Bars)
     barChartContainer: {
-      gap: 16,
-      marginTop: 4,
+      gap: 14,
     },
     barChartRow: {
       gap: 8,
@@ -616,74 +653,121 @@ const createStyles = (colors: any) =>
     },
     barCategoryLabel: {
       color: colors.text1,
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: "600",
       flex: 1,
     },
     barPriceLabel: {
       color: colors.text2,
-      fontSize: 13,
+      fontSize: 12,
       fontWeight: "600",
     },
     barTrack: {
-      height: 10,
+      height: 12,
       backgroundColor: colors.surface2,
       borderRadius: 999,
       overflow: "hidden",
     },
-    barFill: {
+    barFillEmerald: {
       height: "100%",
-      backgroundColor: colors.accent1,
+      backgroundColor: "#10B981", // Emerald
       borderRadius: 999,
     },
-    // Table styling
-    tableHeaderRow: {
-      flexDirection: "row",
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      paddingBottom: 10,
-      marginTop: 4,
+
+    // List Header & Search
+    listHeaderWrap: {
+      marginTop: 8,
+      gap: 12,
+      marginBottom: 8,
     },
-    headerCell: {
-      color: colors.text3,
-      fontSize: 12,
-      fontWeight: "700",
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-    },
-    tableRow: {
+    listHeaderTitleRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      borderBottomWidth: 1,
-      borderBottomColor: colors.surface2,
-      paddingVertical: 14,
     },
-    nameCell: {
+    selectedCountText: {
+      color: "#10B981",
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    searchWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.surface1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 14,
+      paddingHorizontal: 16,
+    },
+    searchIcon: {
+      marginRight: 10,
+    },
+    searchInput: {
+      flex: 1,
+      height: 52,
+      color: colors.text1,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+
+    // Individual Card Items
+    itemCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.surface1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 10,
+    },
+    itemCardSelected: {
+      borderColor: "#10B981",
+      backgroundColor: "rgba(16, 185, 129, 0.08)",
+    },
+    selectionIconWrap: {
+      marginRight: 14,
+    },
+    itemInfo: {
       flex: 1,
       paddingRight: 16,
-    },
-    priceCell: {
-      width: 100,
-      textAlign: "right",
     },
     itemName: {
       color: colors.text1,
       fontSize: 15,
       fontWeight: "600",
+      marginBottom: 4,
     },
     itemCategory: {
       color: colors.text3,
-      fontSize: 12,
-      marginTop: 4,
+      fontSize: 11,
+      fontWeight: "600",
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
     },
-    itemPrice: {
-      color: colors.text1,
-      fontSize: 15,
+    itemPriceWrap: {
+      alignItems: "flex-end",
+    },
+    itemPriceLabel: {
+      color: colors.text3,
+      fontSize: 10,
+      textTransform: "uppercase",
       fontWeight: "700",
-      textAlign: "right",
+      letterSpacing: 0.5,
+      marginBottom: 2,
     },
-    // Empty & Buttons
+    itemPriceEmerald: {
+      color: "#10B981",
+      fontSize: 16,
+      fontWeight: "800",
+    },
+    itemPriceDate: {
+      color: colors.text3,
+      fontSize: 11,
+      marginTop: 2,
+    },
+
+    // Empty States
     emptyStateCard: {
       backgroundColor: colors.surface1,
       borderRadius: 20,
@@ -694,7 +778,7 @@ const createStyles = (colors: any) =>
       gap: 12,
     },
     emptyListWrap: {
-      paddingVertical: 24,
+      paddingVertical: 32,
       alignItems: "center",
     },
     emptyState: {

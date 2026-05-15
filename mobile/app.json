@@ -10,7 +10,10 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.zaidtahir.mobile"
+      "bundleIdentifier": "com.zaidtahir.mobile",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Allow Smart Grocery to use Face ID for secure login."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -38,6 +41,12 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Smart Grocery to use Face ID for secure login."
         }
       ]
     ],

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from database import get_db_connection
 from services.analytics import get_consumption_forecast, detect_anomaly
-from services.scraper import update_market_prices
+from services.scraper import update_market_prices, preview_market_prices, save_market_prices
 from services.analytics import get_ai_learning_status # <--- Import the new function
 
 analytics_bp = Blueprint('analytics', __name__)
@@ -314,6 +314,45 @@ def fetch_live_prices():
     except Exception as e:
         print(f"Scraper Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
+
+@analytics_bp.route('/analytics/fetch-live-prices-preview', methods=['POST'])
+def fetch_live_prices_preview():
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('userId')
+        item_ids = data.get('itemIds')
+        zero_price_only = data.get('zeroPriceOnly', False)
+        
+        results = preview_market_prices(user_id=user_id, item_ids=item_ids, zero_price_only=zero_price_only)
+        
+        return jsonify({
+            "success": True, 
+            "results": results
+        })
+    except Exception as e:
+        print(f"Preview Scraper Error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
+@analytics_bp.route('/analytics/save-live-prices', methods=['POST'])
+def save_live_prices():
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('userId')
+        updates = data.get('updates', [])
+        
+        if not user_id or not updates:
+            return jsonify({"success": False, "message": "userId and updates are required."}), 400
+            
+        count = save_market_prices(user_id=user_id, updates=updates)
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Successfully saved prices for {count} items."
+        })
+    except Exception as e:
+        print(f"Save Scraper Error: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
+
 
 
 @analytics_bp.route('/analytics/status', methods=['GET'])

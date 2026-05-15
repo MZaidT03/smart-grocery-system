@@ -22,11 +22,19 @@ import {
   Cell,
 } from "recharts";
 import Navbar from "../components/dashboard/NavBar";
+import ScrapeOptionsModal from "../components/market-price/ScrapeOptionsModal";
+import PricePreviewModal from "../components/market-price/PricePreviewModal";
 
 const MarketPrices = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isScraping, setIsScraping] = useState(false);
+
+  const [selectedItemIds, setSelectedItemIds] = useState([]);
+  const [optionsModalVisible, setOptionsModalVisible] = useState(false);
+  const [previewModalVisible, setPreviewModalVisible] = useState(false);
+  const [previewResults, setPreviewResults] = useState([]);
+  const [savingPrices, setSavingPrices] = useState(false);
 
   const navigate = useNavigate();
   const user = localStorage.getItem("user");
@@ -50,29 +58,64 @@ const MarketPrices = () => {
     }
   };
 
-  const handleLiveUpdate = async () => {
-    if (!window.confirm("Scan prices for your items?")) return;
+  const toggleSelection = (id) => {
+    setSelectedItemIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
 
+  const handleLiveUpdate = () => {
+    if (!userId || isScraping) return;
+    setOptionsModalVisible(true);
+  };
+
+  const performScrape = async (zeroPriceOnly, itemIds) => {
     setIsScraping(true);
+    setOptionsModalVisible(false);
     try {
-      const res = await fetch(
-        `http://127.0.0.1:5000/analytics/fetch-live-prices`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          // --- FIX: Send userId so backend knows who to scan ---
-          body: JSON.stringify({ userId: userId }),
+      const res = await fetch(`http://127.0.0.1:5000/analytics/fetch-live-prices-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, itemIds, zeroPriceOnly }),
+      });
+      const data = await res.json();
+      if (data?.success) {
+        setPreviewResults(data.results || []);
+        if (data.results?.length > 0) {
+          setPreviewModalVisible(true);
+        } else {
+          alert("Could not find market prices for the requested products.");
         }
-      );
-      const json = await res.json();
-      if (json.success) {
-        alert(json.message);
-        fetchPrices();
+      } else {
+        alert(data?.message || "Could not fetch prices.");
       }
     } catch (err) {
-      alert("Scraping failed.");
+      alert("Server error. Try again.");
     } finally {
       setIsScraping(false);
+    }
+  };
+
+  const handleSavePrices = async (updates) => {
+    setSavingPrices(true);
+    try {
+      const res = await fetch(`http://127.0.0.1:5000/analytics/save-live-prices`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, updates }),
+      });
+      const data = await res.json();
+      if (data?.success) {
+        setPreviewModalVisible(false);
+        setSelectedItemIds([]);
+        fetchPrices();
+      } else {
+        alert(data?.message || "Could not save prices.");
+      }
+    } catch (err) {
+      alert("Server error while saving.");
+    } finally {
+      setSavingPrices(false);
     }
   };
 
@@ -319,6 +362,7 @@ const MarketPrices = () => {
             <table className="w-full text-left">
               <thead className="bg-zinc-950/50 text-xs uppercase text-zinc-500 font-medium">
                 <tr>
+                  <th className="px-6 py-4 w-16"></th>
                   <th className="px-6 py-4">Item Name</th>
                   <th className="px-6 py-4">Category</th>
                   <th className="px-6 py-4 text-right">
@@ -329,7 +373,16 @@ const MarketPrices = () => {
               </thead>
               <tbody className="divide-y divide-zinc-800">
                 {items.map((item) => (
-                  <tr key={item.id} className="hover:bg-zinc-800/30 transition">
+                  <tr 
+                    key={item.id} 
+                    className={`transition cursor-pointer ${selectedItemIds.includes(item.id) ? 'bg-emerald-900/20' : 'hover:bg-zinc-800/30'}`}
+                    onClick={() => toggleSelection(item.id)}
+                  >
+                    <td className="px-6 py-4">
+                      <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${selectedItemIds.includes(item.id) ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600 bg-zinc-900'}`}>
+                        {selectedItemIds.includes(item.id) && <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 font-medium text-white">
                       {item.name}
                     </td>
@@ -351,6 +404,22 @@ const MarketPrices = () => {
           </div>
         </div>
       </div>
+
+      <ScrapeOptionsModal
+        visible={optionsModalVisible}
+        onClose={() => setOptionsModalVisible(false)}
+        selectedCount={selectedItemIds.length}
+        onScrapeSelected={() => performScrape(false, selectedItemIds)}
+        onScrapeAll={() => performScrape(false, [])}
+      />
+
+      <PricePreviewModal
+        visible={previewModalVisible}
+        onClose={() => setPreviewModalVisible(false)}
+        results={previewResults}
+        onSave={handleSavePrices}
+        saving={savingPrices}
+      />
     </div>
   );
 };
