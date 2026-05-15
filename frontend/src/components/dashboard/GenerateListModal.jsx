@@ -6,6 +6,7 @@ const GenerateListModal = ({ onClose, userId, onGenerateSuccess }) => {
   const [genMembers, setGenMembers] = useState(1); // Could pass default from props
   const [genDays, setGenDays] = useState(7);
   const [genDiet, setGenDiet] = useState("Veg");
+  const [selectedCategories, setSelectedCategories] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleGenerateList = async () => {
@@ -20,6 +21,7 @@ const GenerateListModal = ({ onClose, userId, onGenerateSuccess }) => {
           ? `Restock (${genDays} days)`
           : `New List (${genDays} days)`,
       useExistingStock: genMode === "restock",
+      categories: selectedCategories.length > 0 ? selectedCategories : null,
     };
 
     try {
@@ -115,6 +117,33 @@ const GenerateListModal = ({ onClose, userId, onGenerateSuccess }) => {
                   <option value="Non-Veg">Non-Vegetarian</option>
                   <option value="Vegan">Vegan</option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-zinc-400 text-xs uppercase font-bold mb-2">
+                  Select Categories (Optional)
+                </label>
+                <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto pr-2 pb-2">
+                  {["Staples", "Pulses", "Dairy", "Bakery", "Vegetables", "Fruits", "Meat", "Spices", "Snacks", "Breakfast", "Personal Care", "Cleaning", "Household"].map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => {
+                        if (selectedCategories.includes(cat)) {
+                          setSelectedCategories(selectedCategories.filter(c => c !== cat));
+                        } else {
+                          setSelectedCategories([...selectedCategories, cat]);
+                        }
+                      }}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-colors ${
+                        selectedCategories.includes(cat) 
+                        ? "bg-amber-500/20 border-amber-500 text-amber-400" 
+                        : "bg-zinc-950 border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-zinc-500 mt-1">Leave empty to include all items.</p>
               </div>
             </>
           )}

@@ -39,6 +39,7 @@ const ShoppingList = () => {
     diet_preference: "Loading...",
   });
   const [daysToPlan, setDaysToPlan] = useState(7);
+  const [selectedCategories, setSelectedCategories] = useState([]);
 
   // UI Modes
   const [listId, setListId] = useState(null);
@@ -179,6 +180,7 @@ const ShoppingList = () => {
         numMembers: userProfile.household_size,
         dietType: userProfile.diet_preference,
         useExistingStock: mode === "stock",
+        categories: selectedCategories.length > 0 ? selectedCategories : null,
       };
 
       const res = await fetch(`http://127.0.0.1:5000/shopping-list/generate`, {
@@ -416,6 +418,34 @@ const ShoppingList = () => {
                   <span className="text-sm">Restock Essentials</span>
                 </button>
               </div>
+            </div>
+            {/* Category Filter */}
+            <div className="mt-6 border-t border-zinc-800 pt-6">
+              <label className="text-xs text-zinc-400 uppercase font-bold mb-2 block">
+                Filter by Category (Optional)
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => {
+                      if (selectedCategories.includes(cat)) {
+                        setSelectedCategories(selectedCategories.filter(c => c !== cat));
+                      } else {
+                        setSelectedCategories([...selectedCategories, cat]);
+                      }
+                    }}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-colors ${
+                      selectedCategories.includes(cat)
+                        ? "bg-amber-500/20 border-amber-500 text-amber-400"
+                        : "bg-zinc-950 border-zinc-700 text-zinc-400 hover:border-zinc-500"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-zinc-500 mt-1">Select specific categories to include, or leave empty for all.</p>
             </div>
           </div>
         )}

@@ -9,11 +9,15 @@ import {
   Text,
   TextInput,
   View,
+  Switch,
 } from "react-native";
 import { API_BASE_URL } from "@/constants/api";
 import { Colors } from "@/constants/theme";
 import { useTheme } from "@/context/theme";
 import ThemeToggle from "@/components/theme-toggle";
+import * as LocalAuthentication from "expo-local-authentication";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ScanFace } from "lucide-react-native";
 
 export default function LoginScreen() {
   const { scheme } = useTheme();
@@ -23,9 +27,67 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
   const router = useRouter();
 
-  const handleLogin = async () => {
+  React.useEffect(() => {
+    (async () => {
+      const hardware = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      setIsBiometricSupported(hardware && enrolled);
+
+      const remainLogged = await AsyncStorage.getItem("remain_logged_in");
+      if (remainLogged === "true") {
+        const storedUser = await AsyncStorage.getItem("user_creds");
+        if (storedUser) {
+          const { username: u, password: p } = JSON.parse(storedUser);
+          setUsername(u);
+          setPassword(p);
+
+          if (hardware && enrolled) {
+            const authResult = await LocalAuthentication.authenticateAsync({
+              promptMessage: "Unlock Smart Grocery",
+              fallbackLabel: "",
+            });
+            if (authResult.success) {
+              performLogin(u, p, false);
+            } else {
+              Alert.alert("Biometric Error", authResult.error || "Authentication failed.");
+            }
+          } else {
+            // Auto-login if no biometrics are available on device
+            performLogin(u, p, false);
+          }
+        }
+      }
+    })();
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    setError("");
+    const storedUser = await AsyncStorage.getItem("user_creds");
+    if (!storedUser) {
+      setError("No saved credentials. Please login manually first and check 'Remain Logged In'.");
+      return;
+    }
+
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: "Login with Face ID / Touch ID",
+      fallbackLabel: "",
+    });
+
+    if (result.success) {
+      const { username: u, password: p } = JSON.parse(storedUser);
+      setUsername(u);
+      setPassword(p);
+      performLogin(u, p, false);
+    } else {
+      setError(result.error ? `Biometric Error: ${result.error}` : "Authentication failed.");
+    }
+  };
+
+  const performLogin = async (loginUser: string, loginPass: string, saveCreds: boolean) => {
     setError("");
     setLoading(true);
 
@@ -33,12 +95,21 @@ export default function LoginScreen() {
       const res = await fetch(`${API_BASE_URL}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: loginUser, password: loginPass }),
       });
 
       const data = await res.json();
 
       if (data?.success) {
+        if (saveCreds && rememberMe) {
+          await AsyncStorage.setItem("remain_logged_in", "true");
+          await AsyncStorage.setItem("user_creds", JSON.stringify({ username: loginUser, password: loginPass }));
+        } else if (saveCreds && !rememberMe) {
+          await AsyncStorage.removeItem("remain_logged_in");
+          // Optionally keep user_creds for FaceID but require tap, or clear it. Let's keep for FaceID.
+          await AsyncStorage.setItem("user_creds", JSON.stringify({ username: loginUser, password: loginPass }));
+        }
+        
         Alert.alert("Login successful", "Welcome back!");
         router.replace({
           pathname: "/home",
@@ -57,6 +128,12 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
+
+  const handleLogin = () => {
+    performLogin(username, password, true);
+  };
+
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -93,22 +170,46 @@ export default function LoginScreen() {
           />
         </View>
 
+        <View style={styles.optionsRow}>
+          <View style={styles.rememberWrap}>
+            <Switch
+              value={rememberMe}
+              onValueChange={setRememberMe}
+              trackColor={{ false: palette.border, true: palette.accent }}
+              thumbColor={palette.surface}
+            />
+            <Text style={styles.rememberText}>Remain Logged In</Text>
+          </View>
+        </View>
+
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-        <Pressable
-          style={[
-            styles.primaryButton,
-            loading && styles.primaryButtonDisabled,
-          ]}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={palette.background} />
-          ) : (
-            <Text style={styles.primaryButtonText}>Log in</Text>
+        <View style={styles.buttonRow}>
+          <Pressable
+            style={[
+              styles.primaryButton,
+              loading && styles.primaryButtonDisabled,
+            ]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={palette.background} />
+            ) : (
+              <Text style={styles.primaryButtonText}>Log in</Text>
+            )}
+          </Pressable>
+
+          {isBiometricSupported && (
+            <Pressable
+              style={styles.biometricButton}
+              onPress={handleBiometricLogin}
+              disabled={loading}
+            >
+              <ScanFace size={24} color={palette.background} />
+            </Pressable>
           )}
-        </Pressable>
+        </View>
 
         <View style={styles.footerRow}>
           <Text style={styles.footerText}>New here?</Text>
@@ -169,6 +270,9 @@ const createStyles = (palette: typeof Colors.light) =>
       borderRadius: 16,
       paddingVertical: 12,
       alignItems: "center",
+      flex: 1,
+      height: 48,
+      justifyContent: "center",
     },
     primaryButtonDisabled: {
       opacity: 0.7,
@@ -177,6 +281,35 @@ const createStyles = (palette: typeof Colors.light) =>
       color: palette.background,
       fontSize: 16,
       fontWeight: "600",
+    },
+    buttonRow: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    biometricButton: {
+      backgroundColor: palette.accent,
+      borderRadius: 16,
+      width: 48,
+      height: 48,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    optionsRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: -4,
+      marginBottom: 8,
+    },
+    rememberWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    rememberText: {
+      fontSize: 14,
+      color: palette.text,
+      fontWeight: "500",
     },
     errorText: {
       color: palette.danger,

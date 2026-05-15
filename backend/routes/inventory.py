@@ -265,10 +265,17 @@ def update_price(pid):
     item_name = d.get('name')
     conn = get_db_connection()
     try:
-        user_row = conn.execute("SELECT user_id FROM products WHERE product_id = ?", (pid,)).fetchone()
+        user_row = conn.execute("SELECT user_id, current_quantity, price, category FROM products WHERE product_id = ?", (pid,)).fetchone()
         conn.execute("UPDATE products SET price = ? WHERE product_id = ?", (new_price, pid))
         conn.execute("INSERT INTO price_history (item_name, price, date) VALUES (?, ?, date('now'))", (item_name, new_price))
-        if user_row: log_notification(conn, user_row['user_id'], "Price Updated", f"Updated price of {item_name} to Rs {new_price}", "info")
+        if user_row: 
+            old_price = safe_float(user_row['price'], 0)
+            qty = safe_float(user_row['current_quantity'], 0)
+            diff = new_price - old_price
+            if diff > 0 and qty > 0:
+                log_expense(user_row['user_id'], diff * qty, user_row['category'] or 'Other', f"Price manually updated for {item_name}", conn)
+
+            log_notification(conn, user_row['user_id'], "Price Updated", f"Updated price of {item_name} to Rs {new_price}", "info")
         conn.commit()
         return jsonify({"success": True})
     finally:

@@ -1,11 +1,13 @@
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/context/theme";
+import SuccessModal from "@/components/shopping-list/SuccessModal";
+import AddShoppingItemModal from "@/components/shopping-list/AddShoppingItemModal";
+import AdjustQuantityModal from "@/components/shopping-list/AdjustQuantityModal";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -14,6 +16,19 @@ import {
   TextInput,
   View,
 } from "react-native";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Circle,
+  ListChecks,
+  Plus,
+  RefreshCw,
+  Search,
+  ShoppingCart,
+  Trash2,
+  AlertCircle,
+  PackageSearch,
+} from "lucide-react-native";
 
 type ShoppingItem = {
   item_id: number;
@@ -60,9 +75,8 @@ export default function ShoppingListScreen() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
   const params = useLocalSearchParams();
-  const userId = Array.isArray(params.userId)
-    ? params.userId[0]
-    : params.userId;
+  const userId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
+  const displayName = Array.isArray(params.name) ? params.name[0] : params.name;
 
   const [list, setList] = useState<ShoppingList | null>(null);
   const [items, setItems] = useState<ShoppingItem[]>([]);
@@ -73,6 +87,10 @@ export default function ShoppingListScreen() {
 
   const [listMode, setListMode] = useState<"stock" | "catalog">("stock");
   const [daysToPlan, setDaysToPlan] = useState("7");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [confirmedItemsCount, setConfirmedItemsCount] = useState(0);
+  const [confirmedItemsList, setConfirmedItemsList] = useState<{ name: string; qty: number; unit: string }[]>([]);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [newItemName, setNewItemName] = useState("");
@@ -97,11 +115,8 @@ export default function ShoppingListScreen() {
       return;
     }
 
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
 
     try {
       const res = await fetch(`${API_BASE_URL}/shopping-list/${targetListId}`);
@@ -127,16 +142,11 @@ export default function ShoppingListScreen() {
       setLoading(false);
       return;
     }
-
-    const initialListId = Array.isArray(params.listId)
-      ? params.listId[0]
-      : params.listId;
-
+    const initialListId = Array.isArray(params.listId) ? params.listId[0] : params.listId;
     if (initialListId) {
       fetchList(Number(initialListId));
       return;
     }
-
     setLoading(false);
   }, [userId, params.listId]);
 
@@ -148,9 +158,7 @@ export default function ShoppingListScreen() {
 
     const timeout = setTimeout(async () => {
       try {
-        const res = await fetch(
-          `${API_BASE_URL}/shopping/suggest?item=${encodeURIComponent(suggestionQuery)}`,
-        );
+        const res = await fetch(`${API_BASE_URL}/shopping/suggest?item=${encodeURIComponent(suggestionQuery)}`);
         const data = await res.json();
         setSuggestions(Array.isArray(data) ? data.slice(0, 5) : []);
       } catch (err) {
@@ -175,6 +183,7 @@ export default function ShoppingListScreen() {
           numMembers: 1,
           dietType: "Standard",
           useExistingStock: listMode === "stock",
+          categories: selectedCategories.length > 0 ? selectedCategories : null,
         }),
       });
       const data = await res.json();
@@ -253,10 +262,8 @@ export default function ShoppingListScreen() {
     const nextSelected = item.is_selected === 0;
     setItems((prev) =>
       prev.map((entry) =>
-        entry.item_id === item.item_id
-          ? { ...entry, is_selected: nextSelected ? 1 : 0 }
-          : entry,
-      ),
+        entry.item_id === item.item_id ? { ...entry, is_selected: nextSelected ? 1 : 0 } : entry
+      )
     );
 
     try {
@@ -280,14 +287,11 @@ export default function ShoppingListScreen() {
     }
 
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/shopping-list/items/${activeItem.item_id}`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ adjustedQuantity: qty }),
-        },
-      );
+      const res = await fetch(`${API_BASE_URL}/shopping-list/items/${activeItem.item_id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adjustedQuantity: qty }),
+      });
       const data = await res.json();
       if (!data?.success) {
         Alert.alert("Update failed", "Could not update item quantity.");
@@ -311,16 +315,9 @@ export default function ShoppingListScreen() {
         onPress: async () => {
           if (!listId) return;
           try {
-            const res = await fetch(
-              `${API_BASE_URL}/shopping-list/items/${item.item_id}`,
-              {
-                method: "DELETE",
-              },
-            );
+            const res = await fetch(`${API_BASE_URL}/shopping-list/items/${item.item_id}`, { method: "DELETE" });
             const data = await res.json();
-            if (data?.success) {
-              await fetchList(listId, true);
-            }
+            if (data?.success) await fetchList(listId, true);
           } catch (err) {
             Alert.alert("Delete failed", "Server error. Try again.");
           }
@@ -332,40 +329,42 @@ export default function ShoppingListScreen() {
   const handleConfirmList = async () => {
     if (!listId || confirming) return;
 
-    Alert.alert("Confirm shopping list?", "This will add items to inventory.", [
+    Alert.alert("Confirm shopping list?", "This will add the selected items to your inventory.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Confirm",
         onPress: async () => {
           setConfirming(true);
           try {
-            const res = await fetch(
-              `${API_BASE_URL}/shopping-list/${listId}/confirm`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  items: items
-                    .filter((item) => item.is_selected !== 0)
-                    .map((item) => ({
-                      name: item.item_name,
-                      qty:
-                        item.adjusted_quantity ?? item.suggested_quantity ?? 1,
-                      unit: item.consumption_unit,
-                      category: item.category,
-                    })),
-                }),
-              },
-            );
+            const res = await fetch(`${API_BASE_URL}/shopping-list/${listId}/confirm`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                items: items
+                  .filter((item) => item.is_selected !== 0)
+                  .map((item) => ({
+                    name: item.item_name,
+                    qty: item.adjusted_quantity ?? item.suggested_quantity ?? 1,
+                    unit: item.consumption_unit,
+                    category: item.category,
+                  })),
+              }),
+            });
             const data = await res.json();
             if (!data?.success) {
               Alert.alert("Confirm failed", data?.message || "Try again.");
               return;
             }
-            Alert.alert(
-              "Completed",
-              `Added ${data.count || 0} items to inventory.`,
-            );
+            const itemsConfirmed = items
+              .filter((item) => item.is_selected !== 0)
+              .map((item) => ({
+                name: item.item_name,
+                qty: item.adjusted_quantity ?? item.suggested_quantity ?? 1,
+                unit: item.consumption_unit || "kg",
+              }));
+            setConfirmedItemsList(itemsConfirmed);
+            setConfirmedItemsCount(data.count || itemsConfirmed.length);
+            setShowSuccessModal(true);
             await fetchList(listId, true);
           } catch (err) {
             Alert.alert("Confirm failed", "Server error. Try again.");
@@ -381,12 +380,10 @@ export default function ShoppingListScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyState}>
+          <AlertCircle size={48} color={colors.text3} />
           <Text style={styles.emptyTitle}>Session expired</Text>
           <Text style={styles.emptyBody}>Please log in again.</Text>
-          <Pressable
-            style={styles.primaryButton}
-            onPress={() => router.replace("/login")}
-          >
+          <Pressable style={styles.primaryButton} onPress={() => router.replace("/login")}>
             <Text style={styles.primaryButtonText}>Go to login</Text>
           </Pressable>
         </View>
@@ -396,19 +393,20 @@ export default function ShoppingListScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {/* Header */}
       <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>Back</Text>
+        <Pressable onPress={() => router.back()} style={styles.iconButton}>
+          <ArrowLeft size={24} color={colors.text1} />
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.title}>Shopping List</Text>
           <Text style={styles.subtitle}>
-            {list
-              ? list.list_name || `List ${list.list_id}`
-              : "Generate a list"}
+            {list ? list.list_name || `List #${list.list_id}` : "Generate Plan"}
           </Text>
         </View>
-        <Text style={styles.count}>{checkedCount}</Text>
+        <View style={styles.badgeWrap}>
+          <Text style={styles.badgeText}>{checkedCount}/{items.length}</Text>
+        </View>
       </View>
 
       {loading ? (
@@ -416,182 +414,173 @@ export default function ShoppingListScreen() {
           <ActivityIndicator size="large" color={colors.accent1} />
         </View>
       ) : (
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-        >
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           {!list ? (
+            /* Generator Card */
             <View style={styles.generatorCard}>
-              <Text style={styles.sectionTitle}>Create new list</Text>
+              <View style={styles.generatorHeader}>
+                <PackageSearch size={24} color={colors.accent1} />
+                <Text style={styles.sectionTitle}>Create New List</Text>
+              </View>
               <Text style={styles.sectionBody}>
-                Generate a list from your pantry stock or from the catalog.
+                Generate a smart shopping list based on your current pantry stock or from the full catalog.
               </Text>
 
-              <View style={styles.toggleRow}>
+              <View style={styles.segmentedControl}>
                 <Pressable
-                  style={[
-                    styles.toggleChip,
-                    listMode === "stock" && styles.toggleChipActive,
-                  ]}
+                  style={[styles.segmentBtn, listMode === "stock" && styles.segmentBtnActive]}
                   onPress={() => setListMode("stock")}
                 >
-                  <Text
-                    style={[
-                      styles.toggleChipText,
-                      listMode === "stock" && styles.toggleChipTextActive,
-                    ]}
-                  >
-                    Use stock
+                  <Text style={[styles.segmentText, listMode === "stock" && styles.segmentTextActive]}>
+                    Use Stock
                   </Text>
                 </Pressable>
                 <Pressable
-                  style={[
-                    styles.toggleChip,
-                    listMode === "catalog" && styles.toggleChipActive,
-                  ]}
+                  style={[styles.segmentBtn, listMode === "catalog" && styles.segmentBtnActive]}
                   onPress={() => setListMode("catalog")}
                 >
-                  <Text
-                    style={[
-                      styles.toggleChipText,
-                      listMode === "catalog" && styles.toggleChipTextActive,
-                    ]}
-                  >
-                    Use catalog
+                  <Text style={[styles.segmentText, listMode === "catalog" && styles.segmentTextActive]}>
+                    Use Catalog
                   </Text>
                 </Pressable>
               </View>
 
-              <TextInput
-                value={daysToPlan}
-                onChangeText={setDaysToPlan}
-                placeholder="Days to plan"
-                placeholderTextColor={colors.text3}
-                keyboardType="number-pad"
-                style={styles.input}
-              />
+              <View style={styles.inputWrap}>
+                <Text style={styles.inputLabel}>DAYS TO PLAN FOR</Text>
+                <TextInput
+                  value={daysToPlan}
+                  onChangeText={setDaysToPlan}
+                  placeholder="e.g. 7"
+                  placeholderTextColor={colors.text3}
+                  keyboardType="number-pad"
+                  style={styles.textInput}
+                />
+              </View>
+
+              {listMode === "catalog" && (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={styles.inputLabel}>FILTER CATEGORIES (OPTIONAL)</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                    {categories.map((cat) => {
+                      const isActive = selectedCategories.includes(cat);
+                      return (
+                        <Pressable
+                          key={cat}
+                          style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+                          onPress={() => {
+                            if (isActive) setSelectedCategories((prev) => prev.filter((c) => c !== cat));
+                            else setSelectedCategories((prev) => [...prev, cat]);
+                          }}
+                        >
+                          <Text style={[styles.categoryChipText, isActive && styles.categoryChipTextActive]}>
+                            {cat}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                  <Text style={styles.helperText}>Leave empty to include all items.</Text>
+                </View>
+              )}
 
               <Pressable
-                style={[
-                  styles.primaryButton,
-                  generating && styles.disabledButton,
-                ]}
+                style={[styles.primaryButton, { marginTop: 12 }, generating && styles.disabledButton]}
                 onPress={handleGenerateList}
                 disabled={generating}
               >
+                {generating ? <ActivityIndicator size="small" color={colors.bg} /> : <ListChecks size={20} color={colors.bg} />}
                 <Text style={styles.primaryButtonText}>
-                  {generating ? "Generating..." : "Generate shopping list"}
+                  {generating ? "Generating..." : "Generate List"}
                 </Text>
               </Pressable>
             </View>
           ) : (
             <>
+              /* Active List Stats */
               <View style={styles.statsRow}>
-                <View style={styles.statCard}>
-                  <Text style={styles.statLabel}>Items</Text>
+                <View style={styles.statBox}>
+                  <Text style={styles.statLabel}>Total Items</Text>
                   <Text style={styles.statValue}>{items.length}</Text>
                 </View>
-                <View style={styles.statCard}>
+                <View style={styles.statBox}>
                   <Text style={styles.statLabel}>Selected</Text>
                   <Text style={styles.statValue}>{checkedCount}</Text>
                 </View>
-                <View style={styles.statCard}>
+                <View style={styles.statBox}>
                   <Text style={styles.statLabel}>Source</Text>
-                  <Text style={styles.statValueSmall}>
-                    {list.created_from || "catalog"}
-                  </Text>
+                  <Text style={styles.statValueSmall} numberOfLines={1}>{list.created_from || "catalog"}</Text>
                 </View>
               </View>
 
+              /* Smart Add Section */
               <View style={styles.sectionCard}>
-                <Text style={styles.sectionTitle}>Add item manually</Text>
-                <Text style={styles.sectionBody}>
-                  Quickly add a missing ingredient to your list.
-                </Text>
-                <Pressable
-                  style={styles.secondaryButton}
-                  onPress={() => setShowAddModal(true)}
-                >
-                  <Text style={styles.secondaryButtonText}>Add item</Text>
-                </Pressable>
-              </View>
+                <View style={styles.addHeaderRow}>
+                  <Text style={styles.sectionTitle}>Add Items</Text>
+                  <Pressable style={styles.manualAddBtn} onPress={() => setShowAddModal(true)}>
+                    <Plus size={16} color={colors.bg} />
+                    <Text style={styles.manualAddBtnText}>Manual Add</Text>
+                  </Pressable>
+                </View>
 
-              <View style={styles.sectionCard}>
-                <Text style={styles.sectionTitle}>Smart suggestions</Text>
-                <TextInput
-                  value={suggestionQuery}
-                  onChangeText={setSuggestionQuery}
-                  placeholder="Search suggestion"
-                  placeholderTextColor={colors.text3}
-                  style={styles.input}
-                />
+                <View style={styles.searchWrap}>
+                  <Search size={18} color={colors.text3} style={styles.searchIcon} />
+                  <TextInput
+                    value={suggestionQuery}
+                    onChangeText={setSuggestionQuery}
+                    placeholder="Search smart catalog..."
+                    placeholderTextColor={colors.text3}
+                    style={styles.searchInput}
+                  />
+                </View>
+
                 {suggestions.length > 0 && (
                   <View style={styles.suggestionList}>
                     {suggestions.map((item) => (
-                      <Pressable
-                        key={item.item_name}
-                        style={styles.suggestionRow}
-                        onPress={() => handleSuggestAdd(item)}
-                      >
-                        <View>
-                          <Text style={styles.suggestionTitle}>
-                            {item.item_name}
-                          </Text>
-                          <Text style={styles.suggestionMeta}>
-                            {item.category || "Other"}
-                          </Text>
+                      <View key={item.item_name} style={styles.suggestionRow}>
+                        <View style={styles.suggestionInfo}>
+                          <Text style={styles.suggestionTitle}>{item.item_name}</Text>
+                          <Text style={styles.suggestionMeta}>{item.category || "Other"}</Text>
                         </View>
-                        <Text style={styles.suggestionAction}>Add</Text>
-                      </Pressable>
+                        <Pressable style={styles.suggestionAddBtn} onPress={() => handleSuggestAdd(item)}>
+                          <Plus size={16} color={colors.accent1} />
+                        </Pressable>
+                      </View>
                     ))}
                   </View>
                 )}
               </View>
 
-              <View style={styles.sectionCard}>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionTitle}>Current items</Text>
-                  <Pressable onPress={() => fetchList(listId, true)}>
-                    <Text style={styles.sectionLink}>Refresh</Text>
+              /* List Items */
+              <View style={styles.listCard}>
+                <View style={styles.listHeaderRow}>
+                  <Text style={styles.sectionTitle}>Your Items</Text>
+                  <Pressable onPress={() => fetchList(listId, true)} style={styles.refreshBtn}>
+                    <RefreshCw size={16} color={colors.text2} style={refreshing && { opacity: 0.5 }} />
                   </Pressable>
                 </View>
 
                 {items.length === 0 ? (
-                  <Text style={styles.sectionBody}>
-                    No items on this list yet.
-                  </Text>
+                  <View style={styles.emptyListWrap}>
+                    <ShoppingCart size={40} color={colors.surface3} />
+                    <Text style={styles.emptyListText}>No items on this list yet.</Text>
+                  </View>
                 ) : (
-                  items.map((item) => {
+                  items.map((item, index) => {
                     const selected = item.is_selected !== 0;
                     return (
-                      <View key={item.item_id} style={styles.itemRow}>
-                        <Pressable
-                          style={styles.itemMain}
-                          onPress={() => toggleSelected(item)}
-                        >
-                          <View
-                            style={[
-                              styles.checkbox,
-                              selected && styles.checkboxActive,
-                            ]}
-                          >
-                            <Text style={styles.checkboxText}>
-                              {selected ? "✓" : ""}
-                            </Text>
-                          </View>
+                      <View key={item.item_id} style={[styles.itemRow, index === items.length - 1 && { borderBottomWidth: 0 }]}>
+                        <Pressable style={styles.itemMain} onPress={() => toggleSelected(item)}>
+                          {selected ? (
+                            <CheckCircle2 size={24} color={colors.accent1} />
+                          ) : (
+                            <Circle size={24} color={colors.text3} />
+                          )}
                           <View style={styles.itemTextWrap}>
-                            <Text
-                              style={[
-                                styles.itemName,
-                                selected && styles.itemNameDone,
-                              ]}
-                              numberOfLines={1}
-                            >
+                            <Text style={[styles.itemName, selected && styles.itemNameDone]} numberOfLines={1}>
                               {item.item_name}
                             </Text>
                             <Text style={styles.itemMeta}>
-                              {item.category || "Other"} ·{" "}
-                              {item.consumption_unit || "kg"}
+                              {item.category || "Other"} • {item.consumption_unit || "unit"}
                             </Text>
                           </View>
                         </Pressable>
@@ -601,26 +590,16 @@ export default function ShoppingListScreen() {
                             style={styles.qtyPill}
                             onPress={() => {
                               setActiveItem(item);
-                              setAdjustedQty(
-                                String(
-                                  item.adjusted_quantity ??
-                                    item.suggested_quantity ??
-                                    1,
-                                ),
-                              );
+                              setAdjustedQty(String(item.adjusted_quantity ?? item.suggested_quantity ?? 1));
                               setShowAdjustModal(true);
                             }}
                           >
                             <Text style={styles.qtyPillText}>
-                              {Number(
-                                item.adjusted_quantity ??
-                                  item.suggested_quantity ??
-                                  1,
-                              )}
+                              {Number(item.adjusted_quantity ?? item.suggested_quantity ?? 1)}
                             </Text>
                           </Pressable>
-                          <Pressable onPress={() => handleDeleteItem(item)}>
-                            <Text style={styles.deleteText}>Delete</Text>
+                          <Pressable onPress={() => handleDeleteItem(item)} style={styles.deleteBtn}>
+                            <Trash2 size={18} color="#EF4444" />
                           </Pressable>
                         </View>
                       </View>
@@ -630,15 +609,13 @@ export default function ShoppingListScreen() {
               </View>
 
               <Pressable
-                style={[
-                  styles.primaryButton,
-                  confirming && styles.disabledButton,
-                ]}
+                style={[styles.primaryButton, confirming && styles.disabledButton]}
                 onPress={handleConfirmList}
                 disabled={confirming}
               >
+                {confirming ? <ActivityIndicator size="small" color={colors.bg} /> : <ShoppingCart size={20} color={colors.bg} />}
                 <Text style={styles.primaryButtonText}>
-                  {confirming ? "Confirming..." : "Confirm list"}
+                  {confirming ? "Confirming..." : "Confirm & Save List"}
                 </Text>
               </Pressable>
             </>
@@ -646,103 +623,43 @@ export default function ShoppingListScreen() {
         </ScrollView>
       )}
 
-      <Modal visible={showAddModal} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Add item</Text>
-            <TextInput
-              value={newItemName}
-              onChangeText={setNewItemName}
-              placeholder="Item name"
-              placeholderTextColor={colors.text3}
-              style={styles.input}
-            />
-            <TextInput
-              value={newItemQty}
-              onChangeText={setNewItemQty}
-              placeholder="Quantity"
-              placeholderTextColor={colors.text3}
-              keyboardType="decimal-pad"
-              style={styles.input}
-            />
-            <TextInput
-              value={newItemUnit}
-              onChangeText={setNewItemUnit}
-              placeholder="Unit"
-              placeholderTextColor={colors.text3}
-              style={styles.input}
-            />
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.chipRow}
-            >
-              {categories.map((category) => (
-                <Pressable
-                  key={category}
-                  style={[
-                    styles.categoryChip,
-                    newItemCategory === category && styles.categoryChipActive,
-                  ]}
-                  onPress={() => setNewItemCategory(category)}
-                >
-                  <Text
-                    style={[
-                      styles.categoryChipText,
-                      newItemCategory === category &&
-                        styles.categoryChipTextActive,
-                    ]}
-                  >
-                    {category}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.secondaryButton}
-                onPress={() => setShowAddModal(false)}
-              >
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={styles.primaryButton} onPress={handleAddItem}>
-                <Text style={styles.primaryButtonText}>Save</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Modals */}
+      <AddShoppingItemModal
+        visible={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSave={handleAddItem}
+        itemName={newItemName}
+        onItemNameChange={setNewItemName}
+        qty={newItemQty}
+        onQtyChange={setNewItemQty}
+        unit={newItemUnit}
+        onUnitChange={setNewItemUnit}
+        category={newItemCategory}
+        onCategoryChange={setNewItemCategory}
+        categories={categories}
+      />
 
-      <Modal visible={showAdjustModal} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Adjust quantity</Text>
-            <Text style={styles.sectionBody}>{activeItem?.item_name}</Text>
-            <TextInput
-              value={adjustedQty}
-              onChangeText={setAdjustedQty}
-              placeholder="Adjusted quantity"
-              placeholderTextColor={colors.text3}
-              keyboardType="decimal-pad"
-              style={styles.input}
-            />
-            <View style={styles.modalActions}>
-              <Pressable
-                style={styles.secondaryButton}
-                onPress={() => setShowAdjustModal(false)}
-              >
-                <Text style={styles.secondaryButtonText}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                style={styles.primaryButton}
-                onPress={handleUpdateQuantity}
-              >
-                <Text style={styles.primaryButtonText}>Save</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <AdjustQuantityModal
+        visible={showAdjustModal}
+        onClose={() => setShowAdjustModal(false)}
+        onSave={handleUpdateQuantity}
+        itemName={activeItem?.item_name || ""}
+        qty={adjustedQty}
+        onQtyChange={setAdjustedQty}
+      />
+
+      <SuccessModal
+        visible={showSuccessModal}
+        confirmedItemsCount={confirmedItemsCount}
+        confirmedItemsList={confirmedItemsList}
+        onDone={() => {
+          setShowSuccessModal(false);
+          router.push({
+            pathname: "/home",
+            params: { userId: String(userId), name: displayName ?? "", refresh: Date.now() },
+          });
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -753,326 +670,171 @@ const createStyles = (colors: any) =>
       flex: 1,
       backgroundColor: colors.bg,
     },
+    // Header
     headerRow: {
-      paddingHorizontal: 20,
-      paddingTop: 8,
-      paddingBottom: 10,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      gap: 10,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      backgroundColor: colors.bg,
+    },
+    iconButton: {
+      padding: 8,
+      marginLeft: -8,
     },
     headerCenter: {
       flex: 1,
       alignItems: "center",
     },
-    backButton: {
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-      backgroundColor: colors.surface1,
-    },
-    backButtonText: {
-      color: colors.text1,
-      fontWeight: "600",
-    },
     title: {
       fontSize: 18,
-      fontWeight: "700",
+      fontWeight: "800",
       color: colors.text1,
-      textAlign: "center",
+      letterSpacing: -0.5,
     },
     subtitle: {
       color: colors.text2,
       fontSize: 12,
-      marginTop: 4,
-      textAlign: "center",
+      fontWeight: "500",
+      marginTop: 2,
     },
-    count: {
-      minWidth: 28,
-      textAlign: "center",
+    badgeWrap: {
+      backgroundColor: colors.surface2,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    badgeText: {
+      color: colors.text1,
+      fontSize: 12,
       fontWeight: "700",
-      color: colors.accent1,
     },
-    content: {
-      padding: 20,
-      gap: 14,
-      paddingBottom: 28,
-    },
+
+    // Globals
     loadingWrap: {
       flex: 1,
       justifyContent: "center",
       alignItems: "center",
     },
-    generatorCard: {
-      backgroundColor: colors.surface1,
-      borderRadius: 18,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: colors.border,
-      gap: 12,
-    },
-    sectionCard: {
-      backgroundColor: colors.surface1,
-      borderRadius: 18,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: colors.border,
-      gap: 12,
-    },
-    sectionHeaderRow: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
+    content: {
+      padding: 20,
+      gap: 20,
+      paddingBottom: 40,
     },
     sectionTitle: {
       color: colors.text1,
-      fontSize: 16,
+      fontSize: 18,
       fontWeight: "700",
+      letterSpacing: -0.3,
     },
     sectionBody: {
       color: colors.text2,
-      fontSize: 13,
-      lineHeight: 20,
-    },
-    sectionLink: {
-      color: colors.accent1,
-      fontWeight: "700",
-      fontSize: 12,
-    },
-    toggleRow: {
-      flexDirection: "row",
-      gap: 10,
-    },
-    toggleChip: {
-      flex: 1,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface2,
-      borderRadius: 999,
-      paddingVertical: 12,
-      alignItems: "center",
-    },
-    toggleChipActive: {
-      backgroundColor: colors.accent1,
-      borderColor: colors.accent1,
-    },
-    toggleChipText: {
-      color: colors.text1,
-      fontWeight: "700",
-      fontSize: 13,
-    },
-    toggleChipTextActive: {
-      color: colors.bg,
-    },
-    input: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.surface2,
-      color: colors.text1,
-      borderRadius: 14,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
       fontSize: 14,
+      lineHeight: 22,
+      marginTop: 4,
     },
+    inputLabel: {
+      fontSize: 10,
+      fontWeight: "700",
+      color: colors.text3,
+      textTransform: "uppercase",
+      letterSpacing: 0.8,
+      marginBottom: 6,
+    },
+    helperText: {
+      fontSize: 11,
+      color: colors.text3,
+      marginTop: 6,
+    },
+
+    // Buttons
     primaryButton: {
+      flexDirection: "row",
       backgroundColor: colors.accent1,
       borderRadius: 14,
-      paddingVertical: 14,
+      paddingVertical: 16,
+      paddingHorizontal: 24,
+      width: "100%",
       alignItems: "center",
-    },
-    secondaryButton: {
-      backgroundColor: colors.surface2,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 14,
-      paddingVertical: 14,
-      alignItems: "center",
-      flex: 1,
-    },
-    secondaryButtonText: {
-      color: colors.text1,
-      fontWeight: "700",
-      fontSize: 14,
+      justifyContent: "center",
+      gap: 8,
     },
     primaryButtonText: {
       color: colors.bg,
       fontWeight: "700",
-      fontSize: 14,
+      fontSize: 16,
     },
     disabledButton: {
       opacity: 0.6,
     },
-    statsRow: {
-      flexDirection: "row",
-      gap: 10,
-    },
-    statCard: {
-      flex: 1,
+
+    // Generator Card
+    generatorCard: {
       backgroundColor: colors.surface1,
+      borderRadius: 24,
+      padding: 24,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 16,
-      padding: 12,
+      gap: 20,
     },
-    statLabel: {
-      color: colors.text2,
-      fontSize: 10,
-      textTransform: "uppercase",
-      letterSpacing: 0.6,
-      fontWeight: "700",
-    },
-    statValue: {
-      color: colors.text1,
-      fontSize: 22,
-      fontWeight: "800",
-      marginTop: 6,
-    },
-    statValueSmall: {
-      color: colors.text1,
-      fontSize: 14,
-      fontWeight: "700",
-      marginTop: 8,
-      textTransform: "capitalize",
-    },
-    suggestionList: {
-      gap: 8,
-    },
-    suggestionRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      paddingVertical: 10,
-      paddingHorizontal: 12,
-      backgroundColor: colors.surface2,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    suggestionTitle: {
-      color: colors.text1,
-      fontWeight: "700",
-      fontSize: 14,
-    },
-    suggestionMeta: {
-      color: colors.text2,
-      marginTop: 2,
-      fontSize: 12,
-    },
-    suggestionAction: {
-      color: colors.accent1,
-      fontWeight: "700",
-      fontSize: 12,
-    },
-    itemRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      justifyContent: "space-between",
-      gap: 10,
-      paddingVertical: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-    },
-    itemMain: {
+    generatorHeader: {
       flexDirection: "row",
       alignItems: "center",
       gap: 10,
-      flex: 1,
+      marginBottom: -8,
     },
-    checkbox: {
-      width: 24,
-      height: 24,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: colors.border,
-      alignItems: "center",
-      justifyContent: "center",
-      backgroundColor: colors.surface2,
-    },
-    checkboxActive: {
-      backgroundColor: colors.accent1,
-      borderColor: colors.accent1,
-    },
-    checkboxText: {
-      color: colors.bg,
-      fontWeight: "800",
-      fontSize: 12,
-    },
-    itemTextWrap: {
-      flex: 1,
-    },
-    itemName: {
-      color: colors.text1,
-      fontWeight: "700",
-      fontSize: 14,
-    },
-    itemNameDone: {
-      color: colors.text3,
-      textDecorationLine: "line-through",
-    },
-    itemMeta: {
-      color: colors.text2,
-      fontSize: 12,
-      marginTop: 4,
-    },
-    itemActions: {
-      alignItems: "flex-end",
-      gap: 6,
-    },
-    qtyPill: {
-      backgroundColor: colors.surface2,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 999,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-    },
-    qtyPillText: {
-      color: colors.text1,
-      fontWeight: "700",
-      fontSize: 12,
-    },
-    deleteText: {
-      color: colors.danger,
-      fontWeight: "700",
-      fontSize: 12,
-    },
-    modalBackdrop: {
-      flex: 1,
-      backgroundColor: "rgba(0,0,0,0.5)",
-      justifyContent: "flex-end",
-      padding: 16,
-    },
-    modalCard: {
+    segmentedControl: {
+      flexDirection: "row",
       backgroundColor: colors.bg,
-      borderRadius: 20,
+      borderRadius: 12,
+      padding: 4,
       borderWidth: 1,
       borderColor: colors.border,
-      padding: 16,
-      gap: 12,
     },
-    modalTitle: {
+    segmentBtn: {
+      flex: 1,
+      alignItems: "center",
+      paddingVertical: 10,
+      borderRadius: 8,
+    },
+    segmentBtnActive: {
+      backgroundColor: colors.surface2,
+    },
+    segmentText: {
+      color: colors.text2,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    segmentTextActive: {
       color: colors.text1,
-      fontSize: 18,
-      fontWeight: "800",
     },
-    modalActions: {
-      flexDirection: "row",
-      gap: 10,
+    inputWrap: {
       marginTop: 4,
+    },
+    textInput: {
+      backgroundColor: colors.bg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      color: colors.text1,
+      fontSize: 15,
+      fontWeight: "500",
     },
     chipRow: {
-      gap: 10,
+      gap: 8,
       paddingVertical: 4,
     },
     categoryChip: {
+      backgroundColor: colors.bg,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: colors.surface2,
-      borderRadius: 999,
-      paddingHorizontal: 14,
+      borderRadius: 100,
+      paddingHorizontal: 16,
       paddingVertical: 8,
     },
     categoryChipActive: {
@@ -1080,19 +842,219 @@ const createStyles = (colors: any) =>
       borderColor: colors.accent1,
     },
     categoryChipText: {
-      color: colors.text1,
-      fontWeight: "700",
-      fontSize: 12,
+      color: colors.text2,
+      fontSize: 13,
+      fontWeight: "600",
     },
     categoryChipTextActive: {
       color: colors.bg,
     },
+
+    // Stats Row
+    statsRow: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    statBox: {
+      flex: 1,
+      backgroundColor: colors.surface1,
+      borderRadius: 16,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    statLabel: {
+      color: colors.text2,
+      fontSize: 12,
+      fontWeight: "600",
+      marginBottom: 6,
+    },
+    statValue: {
+      color: colors.text1,
+      fontSize: 24,
+      fontWeight: "800",
+    },
+    statValueSmall: {
+      color: colors.text1,
+      fontSize: 16,
+      fontWeight: "700",
+      marginTop: 6,
+      textTransform: "capitalize",
+    },
+
+    // Section Card (Smart Add)
+    sectionCard: {
+      backgroundColor: colors.surface1,
+      borderRadius: 24,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: 16,
+    },
+    addHeaderRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    manualAddBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.text1,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 100,
+      gap: 6,
+    },
+    manualAddBtnText: {
+      color: colors.bg,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    searchWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: colors.bg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+    },
+    searchIcon: {
+      marginRight: 10,
+    },
+    searchInput: {
+      flex: 1,
+      height: 48,
+      color: colors.text1,
+      fontSize: 15,
+    },
+    suggestionList: {
+      backgroundColor: colors.bg,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: "hidden",
+    },
+    suggestionRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      padding: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.surface2,
+    },
+    suggestionInfo: {
+      flex: 1,
+    },
+    suggestionTitle: {
+      color: colors.text1,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    suggestionMeta: {
+      color: colors.text3,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    suggestionAddBtn: {
+      padding: 8,
+      backgroundColor: "rgba(16, 185, 129, 0.1)",
+      borderRadius: 8,
+    },
+
+    // List Card
+    listCard: {
+      backgroundColor: colors.surface1,
+      borderRadius: 24,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    listHeaderRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    refreshBtn: {
+      padding: 4,
+    },
+    emptyListWrap: {
+      padding: 40,
+      alignItems: "center",
+      gap: 12,
+    },
+    emptyListText: {
+      color: colors.text3,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+    itemRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 14,
+      paddingHorizontal: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.surface2,
+    },
+    itemMain: {
+      flexDirection: "row",
+      alignItems: "center",
+      flex: 1,
+      gap: 12,
+      paddingRight: 10,
+    },
+    itemTextWrap: {
+      flex: 1,
+    },
+    itemName: {
+      color: colors.text1,
+      fontSize: 15,
+      fontWeight: "600",
+    },
+    itemNameDone: {
+      color: colors.text3,
+      textDecorationLine: "line-through",
+    },
+    itemMeta: {
+      color: colors.text3,
+      fontSize: 12,
+      marginTop: 4,
+      textTransform: "capitalize",
+    },
+    itemActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    qtyPill: {
+      backgroundColor: colors.surface2,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 100,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    qtyPillText: {
+      color: colors.text1,
+      fontSize: 13,
+      fontWeight: "700",
+    },
+    deleteBtn: {
+      padding: 6,
+    },
+
+    // Empty States (Session Expired)
     emptyState: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
-      gap: 8,
-      paddingHorizontal: 22,
+      gap: 12,
+      paddingHorizontal: 32,
     },
     emptyTitle: {
       color: colors.text1,
@@ -1104,5 +1066,7 @@ const createStyles = (colors: any) =>
       color: colors.text2,
       fontSize: 14,
       textAlign: "center",
+      lineHeight: 22,
+      marginBottom: 8,
     },
   });

@@ -53,10 +53,20 @@ def generate_shopping_list_logic(data):
                     count += 1
         else:
             d_type = diet_input.lower()
-            query = "SELECT * FROM product_catalog"
-            if 'vegan' in d_type: query += " WHERE diet_type = 'Vegan'"
-            elif 'veg' in d_type and 'non' not in d_type: query += " WHERE diet_type IN ('Vegan', 'Veg')"
-            catalog = conn.execute(query).fetchall()
+            query = "SELECT * FROM product_catalog WHERE 1=1"
+            params = []
+            if 'vegan' in d_type: 
+                query += " AND diet_type = 'Vegan'"
+            elif 'veg' in d_type and 'non' not in d_type: 
+                query += " AND diet_type IN ('Vegan', 'Veg')"
+            
+            categories = data.get("categories", [])
+            if categories:
+                placeholders = ', '.join('?' * len(categories))
+                query += f" AND category IN ({placeholders})"
+                params.extend(categories)
+
+            catalog = conn.execute(query, params).fetchall()
             stock_map = {}
             inv = conn.execute("SELECT item_name, current_quantity FROM products WHERE user_id = ? AND is_active = 1", (user_id,)).fetchall()
             for row in inv: stock_map[row['item_name'].lower()] = safe_float(row['current_quantity'])
