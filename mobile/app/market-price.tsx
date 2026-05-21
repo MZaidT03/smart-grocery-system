@@ -1,7 +1,11 @@
 import { API_BASE_URL } from "@/constants/api";
+import PricePreviewModal, {
+  PricePreviewItem,
+} from "@/components/market-price/PricePreviewModal";
+import ScrapeOptionsModal from "@/components/market-price/ScrapeOptionsModal";
 import { useTheme } from "@/context/theme";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,24 +20,29 @@ import {
 } from "react-native";
 import {
   ArrowLeft,
-  RefreshCw,
-  TrendingUp,
-  AlertCircle,
-  Tag,
-  BarChart3,
-  Search,
+  BadgeDollarSign,
+  ChartNoAxesCombined,
   CheckCircle2,
   Circle,
-  DollarSign,
+  CircleAlert,
+  PackageCheck,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Store,
+  Tag,
+  TrendingUp,
+  Wallet,
+  X,
 } from "lucide-react-native";
-import PricePreviewModal, { PricePreviewItem } from "@/components/market-price/PricePreviewModal";
-import ScrapeOptionsModal from "@/components/market-price/ScrapeOptionsModal";
 
 type Product = {
   id: number | string;
   name: string;
   category?: string;
   price?: number;
+  quantity?: number;
+  unit?: string;
 };
 
 type CategoryStat = {
@@ -46,59 +55,79 @@ type RangeStat = {
   count: number;
 };
 
+type MarketStats = {
+  totalValue: number;
+  avgPrice: number;
+  mostExpensive?: Product;
+  pricedCount: number;
+  missingPriceCount: number;
+  categoryData: CategoryStat[];
+  ranges: RangeStat[];
+};
+
 export default function MarketPriceScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
   const params = useLocalSearchParams();
-  const userId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
+  const userId = Array.isArray(params.userId)
+    ? params.userId[0]
+    : params.userId;
 
   const [items, setItems] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [isScraping, setIsScraping] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
   const [selectedItemIds, setSelectedItemIds] = useState<number[]>([]);
   const [optionsModalVisible, setOptionsModalVisible] = useState(false);
   const [previewModalVisible, setPreviewModalVisible] = useState(false);
   const [previewResults, setPreviewResults] = useState<PricePreviewItem[]>([]);
   const [savingPrices, setSavingPrices] = useState(false);
 
-  const fetchPrices = async (isRefresh = false) => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
+  const fetchPrices = useCallback(
+    async (isRefresh = false) => {
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
 
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
 
-    try {
-      const res = await fetch(`${API_BASE_URL}/products?userId=${userId}`);
-      const data = await res.json();
-      setItems(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setItems([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+      try {
+        const res = await fetch(`${API_BASE_URL}/products?userId=${userId}`);
+        const data = await res.json();
+        setItems(Array.isArray(data) ? data : []);
+      } catch {
+        setItems([]);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [userId],
+  );
 
   useEffect(() => {
     fetchPrices();
-  }, [userId]);
+  }, [fetchPrices]);
 
-  const stats = useMemo(() => {
+  const stats = useMemo<MarketStats | null>(() => {
     const validItems = items.filter((item) => Number(item.price) > 0);
-    if (!validItems.length) return null;
+    if (!items.length) return null;
 
-    const totalValue = validItems.reduce((sum, item) => sum + Number(item.price), 0);
-    const avgPrice = totalValue / validItems.length;
-    const mostExpensive = [...validItems].sort((a, b) => Number(b.price) - Number(a.price))[0];
+    const totalValue = validItems.reduce(
+      (sum, item) => sum + Number(item.price),
+      0,
+    );
+    const avgPrice = validItems.length ? totalValue / validItems.length : 0;
+    const mostExpensive = [...validItems].sort(
+      (a, b) => Number(b.price) - Number(a.price),
+    )[0];
 
-    const groupedByCategory: Record<string, { sum: number; count: number }> = {};
+    const groupedByCategory: Record<string, { sum: number; count: number }> =
+      {};
     validItems.forEach((item) => {
       const key = item.category || "Other";
       if (!groupedByCategory[key]) groupedByCategory[key] = { sum: 0, count: 0 };
@@ -109,7 +138,9 @@ export default function MarketPriceScreen() {
     const categoryData: CategoryStat[] = Object.keys(groupedByCategory)
       .map((name) => ({
         name,
-        avgPrice: Math.round(groupedByCategory[name].sum / groupedByCategory[name].count),
+        avgPrice: Math.round(
+          groupedByCategory[name].sum / groupedByCategory[name].count,
+        ),
       }))
       .sort((a, b) => b.avgPrice - a.avgPrice)
       .slice(0, 6);
@@ -129,16 +160,34 @@ export default function MarketPriceScreen() {
       else ranges[3].count += 1;
     });
 
-    return { totalValue, avgPrice, mostExpensive, categoryData, ranges };
+    return {
+      totalValue,
+      avgPrice,
+      mostExpensive,
+      pricedCount: validItems.length,
+      missingPriceCount: items.length - validItems.length,
+      categoryData,
+      ranges,
+    };
   }, [items]);
 
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
-    return items.filter((item) => item.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return items;
+    return items.filter((item) => {
+      const searchable = `${item.name} ${item.category ?? ""} ${
+        item.unit ?? ""
+      }`.toLowerCase();
+      return searchable.includes(normalizedQuery);
+    });
   }, [items, searchQuery]);
 
+  const selectedCount = selectedItemIds.length;
+
   const toggleSelection = (id: number) => {
-    setSelectedItemIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+    setSelectedItemIds((prev) =>
+      prev.includes(id) ? prev.filter((itemId) => itemId !== id) : [...prev, id],
+    );
   };
 
   const handleLiveUpdate = () => {
@@ -150,23 +199,29 @@ export default function MarketPriceScreen() {
     setIsScraping(true);
     setOptionsModalVisible(false);
     try {
-      const res = await fetch(`${API_BASE_URL}/analytics/fetch-live-prices-preview`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, itemIds, zeroPriceOnly }),
-      });
+      const res = await fetch(
+        `${API_BASE_URL}/analytics/fetch-live-prices-preview`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId, itemIds, zeroPriceOnly }),
+        },
+      );
       const data = await res.json();
       if (data?.success) {
         setPreviewResults(data.results || []);
         if (data.results?.length > 0) {
           setPreviewModalVisible(true);
         } else {
-          Alert.alert("No results", "Could not find market prices for the requested products.");
+          Alert.alert(
+            "No results",
+            "Could not find market prices for the requested products.",
+          );
         }
       } else {
         Alert.alert("Scan failed", data?.message || "Could not fetch prices.");
       }
-    } catch (err) {
+    } catch {
       Alert.alert("Error", "Server error. Try again.");
     } finally {
       setIsScraping(false);
@@ -189,7 +244,7 @@ export default function MarketPriceScreen() {
       } else {
         Alert.alert("Save failed", data?.message || "Could not save prices.");
       }
-    } catch (err) {
+    } catch {
       Alert.alert("Error", "Server error while saving.");
     } finally {
       setSavingPrices(false);
@@ -200,10 +255,13 @@ export default function MarketPriceScreen() {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyState}>
-          <AlertCircle size={48} color={colors.text3} />
+          <CircleAlert size={48} color={colors.text3} />
           <Text style={styles.emptyTitle}>Session expired</Text>
           <Text style={styles.emptyBody}>Please log in again to continue.</Text>
-          <Pressable style={styles.primaryButton} onPress={() => router.replace("/login")}>
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() => router.replace("/login")}
+          >
             <Text style={styles.primaryButtonText}>Go to login</Text>
           </Pressable>
         </View>
@@ -213,90 +271,164 @@ export default function MarketPriceScreen() {
 
   const renderDashboardHeader = () => (
     <View style={styles.dashboardHeader}>
-      {/* Intro & Scrape Button */}
-      <View style={styles.introWrap}>
-        <Text style={styles.introSubtitle}>Live pricing data & analytics from</Text>
-        <Text style={styles.introHighlight}>Al-Fatah Online</Text>
+      <View style={styles.topBar}>
+        <Pressable onPress={() => router.back()} style={styles.iconButton}>
+          <ArrowLeft size={20} color={colors.text1} />
+        </Pressable>
+        <View style={styles.titleBlock}>
+          <Text style={styles.eyebrow}>Market</Text>
+          <Text style={styles.title}>Prices</Text>
+        </View>
+        <View style={styles.countBadge}>
+          <Text style={styles.countText}>{items.length}</Text>
+        </View>
+      </View>
+
+      <View style={styles.heroCard}>
+        <View style={styles.heroHeader}>
+          <View style={styles.heroIcon}>
+            <Store size={24} color={colors.accent1} />
+          </View>
+          <View style={styles.heroCopy}>
+            <View style={styles.sourcePill}>
+              <Sparkles size={13} color={colors.accent1} />
+              <Text style={styles.sourceText}>Al-Fatah Online</Text>
+            </View>
+            <Text style={styles.heroTitle}>Market price scan</Text>
+            <Text style={styles.heroText}>
+              Refresh grocery prices, review changes, and save clean market
+              values back into your pantry.
+            </Text>
+          </View>
+        </View>
 
         <Pressable
-          style={[styles.scrapeButton, isScraping && styles.disabledButton]}
+          style={[styles.scanButton, isScraping && styles.disabledButton]}
           onPress={handleLiveUpdate}
           disabled={isScraping}
         >
-          <RefreshCw size={18} color="#fff" style={isScraping ? styles.spinningIcon : {}} />
-          <Text style={styles.scrapeButtonText}>
-            {isScraping ? "Scanning Market..." : "Scrape Live Prices"}
+          <RefreshCw size={18} color={colors.bg} />
+          <Text style={styles.scanButtonText}>
+            {isScraping ? "Scanning market..." : "Scan live prices"}
           </Text>
         </Pressable>
       </View>
 
       {stats ? (
         <>
-          {/* Quick Stats Grid */}
           <View style={styles.kpiGrid}>
             <View style={styles.kpiRow}>
-              <View style={styles.kpiBox}>
-                <View style={styles.kpiHeader}>
-                  <Tag size={14} color={colors.text3} />
-                  <Text style={styles.kpiLabel}>AVG. ITEM PRICE</Text>
-                </View>
-                <Text style={styles.kpiValue}>Rs {Math.round(stats.avgPrice).toLocaleString()}</Text>
-              </View>
+              <MetricCard
+                colors={colors}
+                styles={styles}
+                icon={Tag}
+                label="Average"
+                value={formatRupees(stats.avgPrice)}
+                subText={`${stats.pricedCount} priced`}
+              />
+              <MetricCard
+                colors={colors}
+                styles={styles}
+                icon={CircleAlert}
+                label="Missing"
+                value={String(stats.missingPriceCount)}
+                subText="need scan"
+              />
+            </View>
 
-              <View style={styles.kpiBox}>
-                <View style={styles.kpiHeader}>
-                  <TrendingUp size={14} color={colors.text3} />
-                  <Text style={styles.kpiLabel}>MOST EXPENSIVE</Text>
-                </View>
-                <Text style={styles.kpiValueName} numberOfLines={1}>{stats.mostExpensive?.name}</Text>
-                <Text style={styles.kpiValueSmall}>Rs {Number(stats.mostExpensive?.price || 0).toLocaleString()}</Text>
+            <View style={styles.valueCard}>
+              <View style={styles.valueIcon}>
+                <Wallet size={20} color={colors.accent1} />
+              </View>
+              <View style={styles.valueCopy}>
+                <Text style={styles.valueLabel}>Market basket value</Text>
+                <Text style={styles.valueAmount}>
+                  {formatRupees(stats.totalValue)}
+                </Text>
+                <Text style={styles.valueSubText}>
+                  Cost to buy one of every priced item
+                </Text>
               </View>
             </View>
 
-            <View style={styles.kpiHeroBox}>
-              <View style={styles.kpiHeader}>
-                <BarChart3 size={14} color={colors.text3} />
-                <Text style={styles.kpiLabel}>MARKET BASKET VALUE</Text>
+            {!!stats.mostExpensive && (
+              <View style={styles.highlightCard}>
+                <View style={styles.highlightIcon}>
+                  <TrendingUp size={20} color={colors.accent1} />
+                </View>
+                <View style={styles.highlightCopy}>
+                  <Text style={styles.highlightLabel}>Highest item</Text>
+                  <Text style={styles.highlightTitle} numberOfLines={1}>
+                    {stats.mostExpensive.name}
+                  </Text>
+                </View>
+                <Text style={styles.highlightPrice}>
+                  {formatRupees(stats.mostExpensive.price)}
+                </Text>
               </View>
-              <Text style={styles.kpiValueEmerald}>Rs {Math.round(stats.totalValue).toLocaleString()}</Text>
-              <Text style={styles.kpiSubText}>Total cost to buy 1 of everything</Text>
-            </View>
+            )}
           </View>
 
-          {/* Chart 1: Average Price by Category */}
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Average Price by Category</Text>
-            <View style={styles.barChartContainer}>
-              {stats.categoryData.map((row) => {
-                const max = Math.max(...stats.categoryData.map((item) => item.avgPrice), 1);
-                const widthPercent = Math.max((row.avgPrice / max) * 100, 2);
-                return (
-                  <View key={row.name} style={styles.barChartRow}>
-                    <View style={styles.barChartLabels}>
-                      <Text style={styles.barCategoryLabel} numberOfLines={1}>{row.name}</Text>
-                      <Text style={styles.barPriceLabel}>Rs {row.avgPrice}</Text>
+          {stats.categoryData.length > 0 && (
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <ChartNoAxesCombined size={18} color={colors.accent1} />
+                <Text style={styles.sectionTitle}>Average by category</Text>
+              </View>
+              <View style={styles.barChartContainer}>
+                {stats.categoryData.map((row) => {
+                  const max = Math.max(
+                    ...stats.categoryData.map((item) => item.avgPrice),
+                    1,
+                  );
+                  const widthPercent = Math.max((row.avgPrice / max) * 100, 4);
+                  return (
+                    <View key={row.name} style={styles.barChartRow}>
+                      <View style={styles.barChartLabels}>
+                        <Text style={styles.barCategoryLabel} numberOfLines={1}>
+                          {row.name}
+                        </Text>
+                        <Text style={styles.barPriceLabel}>
+                          {formatRupees(row.avgPrice)}
+                        </Text>
+                      </View>
+                      <View style={styles.barTrack}>
+                        <View
+                          style={[
+                            styles.barFill,
+                            { width: `${widthPercent}%` },
+                          ]}
+                        />
+                      </View>
                     </View>
-                    <View style={styles.barTrack}>
-                      <View style={[styles.barFillEmerald, { width: `${widthPercent}%` }]} />
-                    </View>
-                  </View>
-                );
-              })}
+                  );
+                })}
+              </View>
             </View>
-          </View>
+          )}
 
-          {/* Chart 2: Price Distribution (Histogram) */}
           <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Price Distribution</Text>
+            <View style={styles.sectionHeader}>
+              <BadgeDollarSign size={18} color={colors.accent1} />
+              <Text style={styles.sectionTitle}>Price distribution</Text>
+            </View>
             <View style={styles.columnChartContainer}>
               {stats.ranges.map((bucket) => {
-                const max = Math.max(...stats.ranges.map((item) => item.count), 1);
-                const heightPercent = Math.max((bucket.count / max) * 100, 2); // Min 2% so empty bars show slightly
+                const max = Math.max(
+                  ...stats.ranges.map((item) => item.count),
+                  1,
+                );
+                const heightPercent = Math.max((bucket.count / max) * 100, 4);
                 return (
                   <View key={bucket.name} style={styles.columnWrap}>
                     <Text style={styles.columnValue}>{bucket.count}</Text>
                     <View style={styles.columnTrack}>
-                      <View style={[styles.columnFillAmber, { height: `${heightPercent}%` }]} />
+                      <View
+                        style={[
+                          styles.columnFill,
+                          { height: `${heightPercent}%` },
+                        ]}
+                      />
                     </View>
                     <Text style={styles.columnLabel}>{bucket.name}</Text>
                   </View>
@@ -307,31 +439,47 @@ export default function MarketPriceScreen() {
         </>
       ) : (
         <View style={styles.emptyStateCard}>
-          <BarChart3 size={48} color={colors.surface3} />
-          <Text style={styles.emptyTitle}>No insights available</Text>
+          <ChartNoAxesCombined size={44} color={colors.text3} />
+          <Text style={styles.emptyTitle}>No price insights yet</Text>
           <Text style={styles.emptyBody}>
-            Add products to your inventory and run live scraping to generate analytics.
+            Add products to your pantry, then run a scan to build market
+            analytics.
           </Text>
         </View>
       )}
 
-      {/* List Header & Search Bar */}
-      <View style={styles.listHeaderWrap}>
+      <View style={styles.searchPanel}>
         <View style={styles.listHeaderTitleRow}>
-          <Text style={styles.sectionTitle}>Live Price Feed</Text>
-          {selectedItemIds.length > 0 && (
-            <Text style={styles.selectedCountText}>{selectedItemIds.length} selected</Text>
+          <View>
+            <Text style={styles.eyebrow}>Feed</Text>
+            <Text style={styles.sectionTitle}>Live price feed</Text>
+          </View>
+          {selectedCount > 0 && (
+            <View style={styles.selectedPill}>
+              <Text style={styles.selectedPillText}>
+                {selectedCount} selected
+              </Text>
+            </View>
           )}
         </View>
+
         <View style={styles.searchWrap}>
-          <Search size={18} color={colors.text3} style={styles.searchIcon} />
+          <Search size={18} color={colors.text3} />
           <TextInput
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search items..."
+            placeholder="Search item or category"
             placeholderTextColor={colors.text3}
             style={styles.searchInput}
           />
+          {!!searchQuery && (
+            <Pressable
+              onPress={() => setSearchQuery("")}
+              style={styles.clearButton}
+            >
+              <X size={16} color={colors.text2} />
+            </Pressable>
+          )}
         </View>
       </View>
     </View>
@@ -339,36 +487,29 @@ export default function MarketPriceScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* App Header (Fixed) */}
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} style={styles.iconButton}>
-          <ArrowLeft size={24} color={colors.text1} />
-        </Pressable>
-        <View style={styles.headerTitleWrap}>
-          <DollarSign size={20} color="#10B981" />
-          <Text style={styles.title}>Market Intelligence</Text>
-        </View>
-        <View style={styles.headerSpacer} />
-      </View>
-
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color="#10B981" />
+          <ActivityIndicator size="large" color={colors.accent1} />
+          <Text style={styles.loadingText}>Loading prices</Text>
         </View>
       ) : (
         <FlatList
           data={filteredItems}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.flatListContent}
-          showsVerticalScrollIndicator={true}
-          indicatorStyle="white"
+          showsVerticalScrollIndicator={false}
           ListHeaderComponent={renderDashboardHeader}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => fetchPrices(true)} tintColor="#10B981" />
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => fetchPrices(true)}
+              tintColor={colors.accent1}
+            />
           }
           renderItem={({ item }) => {
             const itemId = Number(item.id);
             const isSelected = selectedItemIds.includes(itemId);
+            const hasPrice = Number(item.price) > 0;
 
             return (
               <Pressable
@@ -377,42 +518,73 @@ export default function MarketPriceScreen() {
               >
                 <View style={styles.selectionIconWrap}>
                   {isSelected ? (
-                    <CheckCircle2 size={22} color="#10B981" />
+                    <CheckCircle2 size={22} color={colors.accent1} />
                   ) : (
                     <Circle size={22} color={colors.text3} />
                   )}
                 </View>
 
+                <View
+                  style={[
+                    styles.itemIcon,
+                    hasPrice ? styles.itemIconPriced : styles.itemIconMissing,
+                  ]}
+                >
+                  {hasPrice ? (
+                    <PackageCheck size={18} color={colors.accent1} />
+                  ) : (
+                    <CircleAlert size={18} color={colors.warning} />
+                  )}
+                </View>
+
                 <View style={styles.itemInfo}>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemCategory}>{item.category || "Uncategorized"}</Text>
+                  <Text style={styles.itemName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.itemCategory} numberOfLines={1}>
+                    {item.category || "Uncategorized"}
+                    {item.quantity && item.unit
+                      ? ` | ${item.quantity} ${item.unit}`
+                      : ""}
+                  </Text>
                 </View>
 
                 <View style={styles.itemPriceWrap}>
-                  <Text style={styles.itemPriceLabel}>Market</Text>
-                  <Text style={styles.itemPriceEmerald}>
-                    Rs {Number(item.price || 0).toLocaleString()}
+                  <Text style={styles.itemPriceLabel}>
+                    {hasPrice ? "Market" : "Missing"}
                   </Text>
-                  <Text style={styles.itemPriceDate}>{item.price ? "Today" : "Never"}</Text>
+                  <Text
+                    style={[
+                      styles.itemPrice,
+                      !hasPrice && styles.itemPriceMissing,
+                    ]}
+                  >
+                    {hasPrice ? formatRupees(item.price) : "Scan"}
+                  </Text>
                 </View>
               </Pressable>
             );
           }}
           ListEmptyComponent={
             <View style={styles.emptyListWrap}>
+              <Search size={28} color={colors.text3} />
+              <Text style={styles.emptyTitle}>
+                {searchQuery ? "No matching prices" : "No products tracked yet"}
+              </Text>
               <Text style={styles.emptyBody}>
-                {searchQuery ? "No matching items found." : "No products tracked yet."}
+                {searchQuery
+                  ? "Try another item name or category."
+                  : "Add products to your pantry first."}
               </Text>
             </View>
           }
         />
       )}
 
-      {/* Modals */}
       <ScrapeOptionsModal
         visible={optionsModalVisible}
         onClose={() => setOptionsModalVisible(false)}
-        selectedCount={selectedItemIds.length}
+        selectedCount={selectedCount}
         onScrapeSelected={() => performScrape(false, selectedItemIds)}
         onScrapeAll={() => performScrape(false, [])}
       />
@@ -428,100 +600,184 @@ export default function MarketPriceScreen() {
   );
 }
 
-const createStyles = (colors: any) =>
-  StyleSheet.create({
+function MetricCard({
+  colors,
+  styles,
+  icon: Icon,
+  label,
+  value,
+  subText,
+}: {
+  colors: any;
+  styles: ReturnType<typeof createStyles>;
+  icon: typeof Tag;
+  label: string;
+  value: string;
+  subText: string;
+}) {
+  return (
+    <View style={styles.kpiBox}>
+      <View style={styles.metricIcon}>
+        <Icon size={17} color={colors.accent1} />
+      </View>
+      <Text style={styles.kpiLabel}>{label}</Text>
+      <Text style={styles.kpiValue} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.kpiSubText}>{subText}</Text>
+    </View>
+  );
+}
+
+const formatRupees = (value?: number) => {
+  if (typeof value !== "number" || Number.isNaN(value)) return "Rs 0";
+  return `Rs ${Math.round(value).toLocaleString("en-PK")}`;
+};
+
+const createStyles = (colors: any) => {
+  const isDark = colors.bg === "#000000";
+  const softAccent = isDark ? "rgba(74, 222, 128, 0.14)" : "#eaf7ef";
+  const softWarning = isDark
+    ? "rgba(234, 179, 8, 0.14)"
+    : "rgba(202, 138, 4, 0.1)";
+  const shadowColor = isDark ? "#000000" : "#102116";
+
+  return StyleSheet.create({
     safeArea: {
       flex: 1,
       backgroundColor: colors.bg,
     },
-    headerRow: {
+    flatListContent: {
+      paddingHorizontal: 18,
+      paddingTop: 16,
+      paddingBottom: 34,
+    },
+    dashboardHeader: {
+      gap: 18,
+      paddingBottom: 12,
+    },
+    topBar: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: colors.bg,
-      zIndex: 10,
+      gap: 12,
     },
     iconButton: {
-      padding: 8,
-      marginLeft: -8,
-    },
-    headerTitleWrap: {
-      flexDirection: "row",
+      width: 44,
+      height: 44,
+      borderRadius: 15,
+      backgroundColor: colors.surface1,
+      borderWidth: 1,
+      borderColor: colors.border,
       alignItems: "center",
-      gap: 6,
+      justifyContent: "center",
+    },
+    titleBlock: {
+      flex: 1,
+    },
+    eyebrow: {
+      color: colors.accent1,
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "uppercase",
     },
     title: {
-      fontSize: 18,
-      fontWeight: "800",
       color: colors.text1,
-      letterSpacing: -0.5,
+      fontSize: 30,
+      fontWeight: "900",
+      lineHeight: 34,
+      marginTop: 2,
     },
-    headerSpacer: {
-      width: 40,
-    },
-    loadingWrap: {
-      flex: 1,
-      justifyContent: "center",
+    countBadge: {
+      minWidth: 44,
+      height: 44,
+      borderRadius: 15,
       alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+      borderWidth: 1,
+      borderColor: isDark ? "rgba(74, 222, 128, 0.28)" : "#ccebd8",
+      paddingHorizontal: 10,
     },
-
-    // FlatList container
-    flatListContent: {
-      padding: 20,
-      paddingBottom: 40,
+    countText: {
+      color: colors.accent1,
+      fontWeight: "900",
+      fontSize: 16,
     },
-    dashboardHeader: {
-      gap: 20,
-      paddingBottom: 8,
+    heroCard: {
+      backgroundColor: colors.surface1,
+      borderRadius: 28,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 18,
+      gap: 16,
+      shadowColor,
+      shadowOpacity: isDark ? 0 : 0.08,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 3,
     },
-
-    // Intro & Scrape Button
-    introWrap: {
-      marginBottom: 4,
+    heroHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 13,
     },
-    introSubtitle: {
+    heroIcon: {
+      width: 56,
+      height: 56,
+      borderRadius: 19,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+    heroCopy: {
+      flex: 1,
+    },
+    sourcePill: {
+      alignSelf: "flex-start",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      borderRadius: 999,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      backgroundColor: softAccent,
+      marginBottom: 8,
+    },
+    sourceText: {
+      color: colors.accent1,
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+    heroTitle: {
+      color: colors.text1,
+      fontSize: 19,
+      fontWeight: "900",
+    },
+    heroText: {
       color: colors.text2,
-      fontSize: 14,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 4,
     },
-    introHighlight: {
-      color: "#10B981", // Emerald
-      fontSize: 14,
-      fontWeight: "700",
-      marginBottom: 16,
-    },
-    scrapeButton: {
+    scanButton: {
+      minHeight: 54,
+      borderRadius: 18,
+      backgroundColor: colors.accent1,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: "#059669", // Emerald 600
-      paddingVertical: 14,
-      paddingHorizontal: 24,
-      borderRadius: 14,
-      width: "100%",
       gap: 8,
-      shadowColor: "#10B981",
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.2,
-      shadowRadius: 8,
-      elevation: 4,
     },
-    scrapeButtonText: {
-      color: "#fff",
+    scanButtonText: {
+      color: colors.bg,
       fontSize: 15,
-      fontWeight: "700",
-    },
-    spinningIcon: {
-      opacity: 0.8,
+      fontWeight: "900",
     },
     disabledButton: {
-      opacity: 0.6,
+      opacity: 0.65,
     },
-
-    // KPI Grid
     kpiGrid: {
       gap: 12,
     },
@@ -531,115 +787,133 @@ const createStyles = (colors: any) =>
     },
     kpiBox: {
       flex: 1,
+      minHeight: 136,
       backgroundColor: colors.surface1,
-      borderRadius: 16,
-      padding: 16,
+      borderRadius: 22,
+      padding: 15,
       borderWidth: 1,
       borderColor: colors.border,
+      justifyContent: "space-between",
     },
-    kpiHeroBox: {
-      backgroundColor: colors.surface1,
-      borderRadius: 16,
-      padding: 20,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    kpiHeader: {
-      flexDirection: "row",
+    metricIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 14,
       alignItems: "center",
-      gap: 6,
-      marginBottom: 10,
+      justifyContent: "center",
+      backgroundColor: softAccent,
     },
     kpiLabel: {
       color: colors.text3,
-      fontSize: 11,
-      fontWeight: "700",
-      letterSpacing: 0.5,
+      fontSize: 10,
+      fontWeight: "900",
+      textTransform: "uppercase",
     },
     kpiValue: {
       color: colors.text1,
-      fontSize: 22,
-      fontWeight: "800",
+      fontSize: 20,
+      fontWeight: "900",
     },
-    kpiValueName: {
-      color: colors.text1,
-      fontSize: 16,
+    kpiSubText: {
+      color: colors.text2,
+      fontSize: 12,
       fontWeight: "700",
     },
-    kpiValueSmall: {
-      color: "#10B981", // Emerald
-      fontSize: 13,
+    valueCard: {
+      backgroundColor: colors.surface1,
+      borderRadius: 24,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: colors.border,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 13,
+    },
+    valueIcon: {
+      width: 50,
+      height: 50,
+      borderRadius: 17,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+    valueCopy: {
+      flex: 1,
+    },
+    valueLabel: {
+      color: colors.text2,
+      fontSize: 12,
+      fontWeight: "800",
+      textTransform: "uppercase",
+    },
+    valueAmount: {
+      color: colors.text1,
+      fontSize: 28,
+      fontWeight: "900",
+      marginTop: 3,
+    },
+    valueSubText: {
+      color: colors.text3,
+      fontSize: 12,
       fontWeight: "700",
       marginTop: 2,
     },
-    kpiValueEmerald: {
-      color: "#10B981",
-      fontSize: 32,
-      fontWeight: "800",
+    highlightCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      backgroundColor: colors.surface1,
+      borderRadius: 22,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
     },
-    kpiSubText: {
+    highlightIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+    highlightCopy: {
+      flex: 1,
+    },
+    highlightLabel: {
       color: colors.text3,
-      fontSize: 12,
-      marginTop: 4,
+      fontSize: 10,
+      fontWeight: "900",
+      textTransform: "uppercase",
     },
-
-    // Section Cards
+    highlightTitle: {
+      color: colors.text1,
+      fontSize: 15,
+      fontWeight: "900",
+      marginTop: 2,
+    },
+    highlightPrice: {
+      color: colors.accent1,
+      fontSize: 14,
+      fontWeight: "900",
+    },
     sectionCard: {
       backgroundColor: colors.surface1,
-      borderRadius: 20,
-      padding: 20,
+      borderRadius: 24,
+      padding: 18,
       borderWidth: 1,
       borderColor: colors.border,
       gap: 16,
     },
+    sectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
     sectionTitle: {
       color: colors.text1,
-      fontSize: 17,
-      fontWeight: "700",
+      fontSize: 20,
+      fontWeight: "900",
     },
-
-    // Column Chart (Vertical Bars / Histogram)
-    columnChartContainer: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "flex-end",
-      height: 160,
-      marginTop: 10,
-      paddingHorizontal: 4,
-    },
-    columnWrap: {
-      alignItems: "center",
-      flex: 1,
-      height: "100%",
-      justifyContent: "flex-end",
-      gap: 6,
-    },
-    columnValue: {
-      color: colors.text2,
-      fontSize: 11,
-      fontWeight: "700",
-    },
-    columnTrack: {
-      width: "100%",
-      maxWidth: 32,
-      flex: 1,
-      backgroundColor: colors.surface2,
-      borderRadius: 6,
-      justifyContent: "flex-end",
-      overflow: "hidden",
-    },
-    columnFillAmber: {
-      width: "100%",
-      backgroundColor: "#F59E0B", // Amber
-      borderRadius: 6,
-    },
-    columnLabel: {
-      color: colors.text3,
-      fontSize: 10,
-      fontWeight: "600",
-    },
-
-    // Bar Chart (Horizontal Bars)
     barChartContainer: {
       gap: 14,
     },
@@ -650,136 +924,210 @@ const createStyles = (colors: any) =>
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
+      gap: 10,
     },
     barCategoryLabel: {
       color: colors.text1,
       fontSize: 13,
-      fontWeight: "600",
+      fontWeight: "800",
       flex: 1,
     },
     barPriceLabel: {
       color: colors.text2,
       fontSize: 12,
-      fontWeight: "600",
+      fontWeight: "800",
     },
     barTrack: {
-      height: 12,
-      backgroundColor: colors.surface2,
+      height: 10,
+      backgroundColor: colors.surface3,
       borderRadius: 999,
       overflow: "hidden",
     },
-    barFillEmerald: {
+    barFill: {
       height: "100%",
-      backgroundColor: "#10B981", // Emerald
+      backgroundColor: colors.accent1,
       borderRadius: 999,
     },
-
-    // List Header & Search
-    listHeaderWrap: {
-      marginTop: 8,
+    columnChartContainer: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-end",
+      height: 150,
+      paddingHorizontal: 2,
+    },
+    columnWrap: {
+      flex: 1,
+      height: "100%",
+      justifyContent: "flex-end",
+      alignItems: "center",
+      gap: 6,
+    },
+    columnValue: {
+      color: colors.text2,
+      fontSize: 11,
+      fontWeight: "900",
+    },
+    columnTrack: {
+      width: "100%",
+      maxWidth: 34,
+      flex: 1,
+      backgroundColor: colors.surface3,
+      borderRadius: 10,
+      justifyContent: "flex-end",
+      overflow: "hidden",
+    },
+    columnFill: {
+      width: "100%",
+      backgroundColor: "#f59e0b",
+      borderRadius: 10,
+    },
+    columnLabel: {
+      color: colors.text3,
+      fontSize: 10,
+      fontWeight: "800",
+    },
+    searchPanel: {
+      backgroundColor: colors.surface1,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 14,
       gap: 12,
-      marginBottom: 8,
     },
     listHeaderTitleRow: {
       flexDirection: "row",
-      alignItems: "center",
       justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
     },
-    selectedCountText: {
-      color: "#10B981",
-      fontSize: 13,
-      fontWeight: "700",
+    selectedPill: {
+      borderRadius: 999,
+      backgroundColor: softAccent,
+      paddingHorizontal: 11,
+      paddingVertical: 7,
+    },
+    selectedPillText: {
+      color: colors.accent1,
+      fontSize: 12,
+      fontWeight: "900",
     },
     searchWrap: {
-      flexDirection: "row",
-      alignItems: "center",
-      backgroundColor: colors.surface1,
+      minHeight: 50,
+      borderRadius: 17,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 14,
-      paddingHorizontal: 16,
-    },
-    searchIcon: {
-      marginRight: 10,
+      backgroundColor: colors.bg,
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 13,
+      gap: 9,
     },
     searchInput: {
       flex: 1,
-      height: 52,
       color: colors.text1,
       fontSize: 15,
-      fontWeight: "500",
+      fontWeight: "700",
+      paddingVertical: 0,
     },
-
-    // Individual Card Items
+    clearButton: {
+      width: 30,
+      height: 30,
+      borderRadius: 10,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface2,
+    },
     itemCard: {
+      minHeight: 82,
       flexDirection: "row",
       alignItems: "center",
+      gap: 10,
       backgroundColor: colors.surface1,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 16,
-      padding: 16,
+      borderRadius: 20,
+      padding: 12,
       marginBottom: 10,
     },
     itemCardSelected: {
-      borderColor: "#10B981",
-      backgroundColor: "rgba(16, 185, 129, 0.08)",
+      borderColor: colors.accent1,
+      backgroundColor: softAccent,
     },
     selectionIconWrap: {
-      marginRight: 14,
+      width: 24,
+      alignItems: "center",
+    },
+    itemIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    itemIconPriced: {
+      backgroundColor: softAccent,
+    },
+    itemIconMissing: {
+      backgroundColor: softWarning,
     },
     itemInfo: {
       flex: 1,
-      paddingRight: 16,
+      gap: 5,
     },
     itemName: {
       color: colors.text1,
       fontSize: 15,
-      fontWeight: "600",
-      marginBottom: 4,
+      fontWeight: "900",
     },
     itemCategory: {
-      color: colors.text3,
-      fontSize: 11,
-      fontWeight: "600",
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
+      color: colors.text2,
+      fontSize: 12,
+      fontWeight: "700",
     },
     itemPriceWrap: {
       alignItems: "flex-end",
+      minWidth: 76,
     },
     itemPriceLabel: {
       color: colors.text3,
       fontSize: 10,
       textTransform: "uppercase",
-      fontWeight: "700",
-      letterSpacing: 0.5,
-      marginBottom: 2,
+      fontWeight: "900",
+      marginBottom: 3,
     },
-    itemPriceEmerald: {
-      color: "#10B981",
-      fontSize: 16,
+    itemPrice: {
+      color: colors.accent1,
+      fontSize: 14,
+      fontWeight: "900",
+    },
+    itemPriceMissing: {
+      color: colors.warning,
+    },
+    loadingWrap: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+    },
+    loadingText: {
+      color: colors.text2,
+      fontSize: 13,
       fontWeight: "800",
     },
-    itemPriceDate: {
-      color: colors.text3,
-      fontSize: 11,
-      marginTop: 2,
-    },
-
-    // Empty States
     emptyStateCard: {
       backgroundColor: colors.surface1,
-      borderRadius: 20,
-      padding: 32,
+      borderRadius: 24,
+      padding: 28,
       alignItems: "center",
       borderWidth: 1,
       borderColor: colors.border,
-      gap: 12,
+      gap: 10,
     },
     emptyListWrap: {
-      paddingVertical: 32,
       alignItems: "center",
+      paddingVertical: 40,
+      paddingHorizontal: 22,
+      gap: 10,
     },
     emptyState: {
       flex: 1,
@@ -787,32 +1135,33 @@ const createStyles = (colors: any) =>
       justifyContent: "center",
       gap: 12,
       paddingHorizontal: 32,
+      backgroundColor: colors.bg,
     },
     emptyTitle: {
       color: colors.text1,
-      fontSize: 20,
-      fontWeight: "700",
+      fontSize: 19,
+      fontWeight: "900",
       textAlign: "center",
-      marginTop: 8,
     },
     emptyBody: {
       color: colors.text2,
-      fontSize: 15,
+      fontSize: 14,
       textAlign: "center",
-      lineHeight: 22,
-      marginBottom: 12,
+      lineHeight: 20,
     },
     primaryButton: {
+      marginTop: 8,
       backgroundColor: colors.accent1,
-      borderRadius: 14,
+      borderRadius: 16,
       paddingVertical: 14,
-      paddingHorizontal: 24,
-      width: "100%",
+      paddingHorizontal: 20,
       alignItems: "center",
+      width: "100%",
     },
     primaryButtonText: {
       color: colors.bg,
-      fontWeight: "700",
-      fontSize: 16,
+      fontWeight: "900",
+      fontSize: 15,
     },
   });
+};

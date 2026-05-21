@@ -1,11 +1,9 @@
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/context/theme";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
-  Dimensions,
   Pressable,
   RefreshControl,
   SafeAreaView,
@@ -15,19 +13,22 @@ import {
   View,
 } from "react-native";
 import {
-  ArrowLeft,
   Activity,
-  TrendingUp,
-  Zap,
-  Sun,
-  AlertCircle,
+  ArrowLeft,
+  BrainCircuit,
+  CalendarDays,
+  ChartColumn,
+  ChartNoAxesCombined,
+  ChartPie,
+  CircleAlert,
   ListOrdered,
-  PieChart,
+  RefreshCw,
+  Sparkles,
+  Sun,
+  Trophy,
+  Utensils,
+  Zap,
 } from "lucide-react-native";
-
-type InsightItem = {
-  text: string;
-};
 
 type ConsumptionTrend = {
   month: string;
@@ -72,43 +73,72 @@ export default function AnalyticsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchAnalytics = async (isRefresh = false) => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
-
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/analytics/dashboard?userId=${userId}`,
-      );
-      const json = await res.json();
-      if (json.success) {
-        setData(json);
+  const fetchAnalytics = useCallback(
+    async (isRefresh = false) => {
+      if (!userId) {
+        setLoading(false);
+        return;
       }
-    } catch (err) {
-      console.error("Analytics fetch error:", err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
+
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/analytics/dashboard?userId=${userId}`,
+        );
+        const json = await res.json();
+        setData(json?.success ? json : null);
+      } catch {
+        setData(null);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [userId],
+  );
 
   useEffect(() => {
     fetchAnalytics();
-  }, [userId]);
+  }, [fetchAnalytics]);
+
+  const analyticsSummary = useMemo(() => {
+    const totalConsumed =
+      data?.consumption_trend?.reduce((sum, item) => sum + item.items, 0) ?? 0;
+    const peakMonth = [...(data?.consumption_trend ?? [])].sort(
+      (a, b) => b.items - a.items,
+    )[0];
+    const topItem = data?.top_items?.[0];
+    const peakSeason = [...(data?.seasonal_trends ?? [])].sort(
+      (a, b) => b.value - a.value,
+    )[0];
+    const dietTotal =
+      data?.dietaryComposition?.reduce((sum, item) => sum + item.A, 0) ?? 0;
+
+    return {
+      totalConsumed,
+      peakMonth,
+      topItem,
+      peakSeason,
+      dietTotal,
+      insightCount: data?.insights?.length ?? 0,
+    };
+  }, [data]);
+
+  const hasAnalytics =
+    !!data &&
+    (data.consumption_trend.length > 0 ||
+      data.top_items.length > 0 ||
+      data.seasonal_trends.length > 0 ||
+      data.dietaryComposition.length > 0 ||
+      data.insights.length > 0);
 
   if (!userId) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyState}>
-          <AlertCircle size={48} color={colors.text3} />
+          <CircleAlert size={48} color={colors.text3} />
           <Text style={styles.emptyTitle}>Session expired</Text>
           <Text style={styles.emptyBody}>Please log in again to continue.</Text>
           <Pressable
@@ -124,25 +154,10 @@ export default function AnalyticsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} style={styles.iconButton}>
-          <ArrowLeft size={24} color={colors.text1} />
-        </Pressable>
-        <View style={styles.headerCenter}>
-          <View style={styles.headerTitleRow}>
-            <Activity size={20} color={colors.accent1} />
-            <Text style={styles.title}>Data Analytics</Text>
-          </View>
-          <Text style={styles.subtitle}>Insights & consumption patterns</Text>
-        </View>
-        <View style={styles.headerSpacer} />
-      </View>
-
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={colors.accent1} />
-          <Text style={styles.loadingText}>Loading Analytics...</Text>
+          <Text style={styles.loadingText}>Loading analytics</Text>
         </View>
       ) : (
         <ScrollView
@@ -156,188 +171,237 @@ export default function AnalyticsScreen() {
             />
           }
         >
-          {/* Smart Insights (AI Card) */}
-          {data?.insights && data.insights.length > 0 && (
-            <View style={styles.insightCard}>
-              <Zap size={24} color="#8B5CF6" />
-              <View style={styles.insightTextWrap}>
-                <Text style={styles.insightTitle}>Pattern Recognition</Text>
-                {data.insights.map((insight, idx) => (
-                  <View key={idx} style={styles.insightListItem}>
-                    <View style={styles.insightDot} />
-                    <Text style={styles.insightBody}>{insight}</Text>
+          <View style={styles.topBar}>
+            <Pressable onPress={() => router.back()} style={styles.iconButton}>
+              <ArrowLeft size={20} color={colors.text1} />
+            </Pressable>
+            <View style={styles.titleBlock}>
+              <Text style={styles.eyebrow}>Analytics</Text>
+              <Text style={styles.title}>Data insights</Text>
+            </View>
+            <Pressable
+              style={styles.refreshButton}
+              onPress={() => fetchAnalytics(true)}
+              disabled={refreshing}
+            >
+              <RefreshCw size={18} color={colors.accent1} />
+            </Pressable>
+          </View>
+
+          <View style={styles.heroCard}>
+            <View style={styles.heroHeader}>
+              <View style={styles.heroIcon}>
+                <BrainCircuit size={25} color={colors.accent1} />
+              </View>
+              <View style={styles.heroCopy}>
+                <View style={styles.sourcePill}>
+                  <Sparkles size={13} color={colors.accent1} />
+                  <Text style={styles.sourceText}>Pattern engine</Text>
+                </View>
+                <Text style={styles.heroTitle}>Understand grocery behavior</Text>
+                <Text style={styles.heroText}>
+                  Track consumption velocity, top items, seasonal behavior, and
+                  stock composition in one scan-friendly dashboard.
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.summaryRow}>
+              <SummaryTile
+                colors={colors}
+                styles={styles}
+                icon={Activity}
+                label="Consumed"
+                value={String(analyticsSummary.totalConsumed)}
+              />
+              <SummaryTile
+                colors={colors}
+                styles={styles}
+                icon={Zap}
+                label="Insights"
+                value={String(analyticsSummary.insightCount)}
+              />
+              <SummaryTile
+                colors={colors}
+                styles={styles}
+                icon={Utensils}
+                label="Stock mix"
+                value={String(analyticsSummary.dietTotal)}
+              />
+            </View>
+          </View>
+
+          {!hasAnalytics ? (
+            <View style={styles.emptyStateCard}>
+              <ChartNoAxesCombined size={44} color={colors.text3} />
+              <Text style={styles.emptyTitle}>No analytics yet</Text>
+              <Text style={styles.emptyBody}>
+                Consume items and keep inventory updated to generate meaningful
+                patterns.
+              </Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.kpiGrid}>
+                <View style={styles.kpiRow}>
+                  <MetricCard
+                    colors={colors}
+                    styles={styles}
+                    icon={CalendarDays}
+                    label="Peak month"
+                    value={analyticsSummary.peakMonth?.month ?? "None"}
+                    subText={
+                      analyticsSummary.peakMonth
+                        ? `${analyticsSummary.peakMonth.items} events`
+                        : "No monthly data"
+                    }
+                  />
+                  <MetricCard
+                    colors={colors}
+                    styles={styles}
+                    icon={Trophy}
+                    label="Top item"
+                    value={analyticsSummary.topItem?.name ?? "None"}
+                    subText={
+                      analyticsSummary.topItem
+                        ? `${analyticsSummary.topItem.count} consumed`
+                        : "No item data"
+                    }
+                  />
+                </View>
+
+                <View style={styles.highlightCard}>
+                  <View style={styles.highlightIcon}>
+                    <Sun size={20} color="#f59e0b" />
                   </View>
-                ))}
+                  <View style={styles.highlightCopy}>
+                    <Text style={styles.highlightLabel}>Seasonal peak</Text>
+                    <Text style={styles.highlightTitle}>
+                      {analyticsSummary.peakSeason?.name ?? "Not enough data"}
+                    </Text>
+                  </View>
+                  <Text style={styles.highlightValue}>
+                    {analyticsSummary.peakSeason?.value ?? 0}
+                  </Text>
+                </View>
               </View>
-            </View>
-          )}
 
-          {/* Consumption Velocity (Vertical Column Chart) */}
-          {data?.consumption_trend && data.consumption_trend.length > 0 && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <TrendingUp size={20} color={colors.text1} />
-                <Text style={styles.sectionTitle}>Consumption Velocity</Text>
-              </View>
-              <Text style={styles.sectionSubtitle}>
-                Total items consumed per month
-              </Text>
-
-              <View style={styles.columnChartContainer}>
-                {data.consumption_trend.map((item, idx) => {
-                  const maxVal = Math.max(
-                    ...data.consumption_trend.map((i) => i.items),
-                    1,
-                  );
-                  const heightPct = Math.max((item.items / maxVal) * 100, 5);
-
-                  return (
-                    <View key={idx} style={styles.columnWrap}>
-                      <Text style={styles.columnValue}>{item.items}</Text>
-                      <View style={styles.columnTrack}>
-                        <View
-                          style={[
-                            styles.columnFill,
-                            { height: `${heightPct}%` },
-                          ]}
-                        />
+              {!!data?.insights?.length && (
+                <View style={styles.insightCard}>
+                  <View style={styles.insightIcon}>
+                    <Zap size={20} color="#8b5cf6" />
+                  </View>
+                  <View style={styles.insightTextWrap}>
+                    <Text style={styles.insightTitle}>AI insight</Text>
+                    {data.insights.map((insight, index) => (
+                      <View key={`${insight}-${index}`} style={styles.insightListItem}>
+                        <View style={styles.insightDot} />
+                        <Text style={styles.insightBody}>{cleanInsight(insight)}</Text>
                       </View>
-                      <Text style={styles.columnLabel}>{item.month}</Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          )}
+                    ))}
+                  </View>
+                </View>
+              )}
 
-          {/* Top Items (Horizontal Bar Chart) */}
-          {data?.top_items && data.top_items.length > 0 && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <ListOrdered size={20} color={colors.text1} />
-                <Text style={styles.sectionTitle}>Most Consumed Items</Text>
-              </View>
-              <Text style={styles.sectionSubtitle}>
-                Your top {Math.min(5, data.top_items.length)} items
-              </Text>
-
-              <View style={styles.barChartContainer}>
-                {data.top_items.map((item, idx) => {
-                  const maxCount = Math.max(
-                    ...data.top_items.map((i) => i.count),
-                    1,
-                  );
-                  const widthPercent = Math.max(
-                    (item.count / maxCount) * 100,
-                    2,
-                  );
-
-                  return (
-                    <View key={idx} style={styles.barChartRow}>
-                      <View style={styles.barChartLabels}>
-                        <Text style={styles.barCategoryLabel} numberOfLines={1}>
-                          {idx + 1}. {item.name}
-                        </Text>
-                        <Text style={styles.barPriceLabel}>{item.count}x</Text>
-                      </View>
-                      <View style={styles.barTrack}>
-                        <View
-                          style={[
-                            styles.barFillAlt,
-                            { width: `${widthPercent}%` },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          {/* Seasonal Trends (Horizontal Bar Chart) */}
-          {data?.seasonal_trends && data.seasonal_trends.length > 0 && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <Sun size={20} color={colors.text1} />
-                <Text style={styles.sectionTitle}>Seasonal Trends</Text>
-              </View>
-              <Text style={styles.sectionSubtitle}>
-                Consumption intensity by season
-              </Text>
-
-              <View style={styles.barChartContainer}>
-                {data.seasonal_trends.map((season, idx) => {
-                  const maxValue = Math.max(
-                    ...data.seasonal_trends.map((s) => s.value),
-                    1,
-                  );
-                  const percentage = Math.max(
-                    (season.value / maxValue) * 100,
-                    2,
-                  );
-
-                  return (
-                    <View key={idx} style={styles.barChartRow}>
-                      <View style={styles.barChartLabels}>
-                        <Text style={styles.barCategoryLabel}>
-                          {season.name}
-                        </Text>
-                        <Text style={styles.barPriceLabel}>{season.value}</Text>
-                      </View>
-                      <View style={styles.barTrack}>
-                        <View
-                          style={[
-                            styles.barFillWarning,
-                            { width: `${percentage}%` },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-
-          {/* Dietary Composition (Vertical Column Chart) */}
-          {data?.dietaryComposition && data.dietaryComposition.length > 0 && (
-            <View style={styles.sectionCard}>
-              <View style={styles.sectionHeader}>
-                <PieChart size={20} color={colors.text1} />
-                <Text style={styles.sectionTitle}>Dietary Composition</Text>
-              </View>
-              <Text style={styles.sectionSubtitle}>
-                Nutritional breakdown of your stock
-              </Text>
-
-              <View style={styles.columnChartContainer}>
-                {data.dietaryComposition.map((item, idx) => {
-                  const maxValue = Math.max(
-                    ...data.dietaryComposition.map((d) => d.A),
-                    1,
-                  );
-                  const percentage = Math.max((item.A / maxValue) * 100, 5);
-
-                  return (
-                    <View key={idx} style={styles.columnWrap}>
-                      <Text style={styles.columnValue}>{item.A}</Text>
-                      <View style={styles.columnTrack}>
-                        <View
-                          style={[
-                            styles.barFillSuccess,
-                            { height: `${percentage}%` },
-                          ]}
-                        />
-                      </View>
-                      <Text style={styles.columnLabel} numberOfLines={1}>
-                        {item.subject}
+              {!!data?.consumption_trend?.length && (
+                <View style={styles.sectionCard}>
+                  <View style={styles.sectionHeader}>
+                    <ChartColumn size={18} color={colors.accent1} />
+                    <View>
+                      <Text style={styles.sectionTitle}>
+                        Consumption velocity
+                      </Text>
+                      <Text style={styles.sectionSubtitle}>
+                        Items consumed by month
                       </Text>
                     </View>
-                  );
-                })}
-              </View>
-            </View>
+                  </View>
+
+                  <ColumnChart
+                    data={data.consumption_trend.map((item) => ({
+                      label: item.month,
+                      value: item.items,
+                    }))}
+                    fillStyle={styles.columnFill}
+                    styles={styles}
+                  />
+                </View>
+              )}
+
+              {!!data?.top_items?.length && (
+                <View style={styles.sectionCard}>
+                  <View style={styles.sectionHeader}>
+                    <ListOrdered size={18} color={colors.accent1} />
+                    <View>
+                      <Text style={styles.sectionTitle}>
+                        Most consumed items
+                      </Text>
+                      <Text style={styles.sectionSubtitle}>
+                        Top pantry usage frequency
+                      </Text>
+                    </View>
+                  </View>
+
+                  <BarChart
+                    data={data.top_items.map((item, index) => ({
+                      label: `${index + 1}. ${item.name}`,
+                      value: item.count,
+                      suffix: "x",
+                    }))}
+                    fillStyle={styles.barFillBlue}
+                    styles={styles}
+                  />
+                </View>
+              )}
+
+              {!!data?.seasonal_trends?.length && (
+                <View style={styles.sectionCard}>
+                  <View style={styles.sectionHeader}>
+                    <Sun size={18} color={colors.accent1} />
+                    <View>
+                      <Text style={styles.sectionTitle}>Seasonal trends</Text>
+                      <Text style={styles.sectionSubtitle}>
+                        Usage intensity by season
+                      </Text>
+                    </View>
+                  </View>
+
+                  <BarChart
+                    data={data.seasonal_trends.map((item) => ({
+                      label: item.name,
+                      value: item.value,
+                    }))}
+                    fillStyle={styles.barFillWarning}
+                    styles={styles}
+                  />
+                </View>
+              )}
+
+              {!!data?.dietaryComposition?.length && (
+                <View style={styles.sectionCard}>
+                  <View style={styles.sectionHeader}>
+                    <ChartPie size={18} color={colors.accent1} />
+                    <View>
+                      <Text style={styles.sectionTitle}>
+                        Dietary composition
+                      </Text>
+                      <Text style={styles.sectionSubtitle}>
+                        Nutritional category mix in stock
+                      </Text>
+                    </View>
+                  </View>
+
+                  <ColumnChart
+                    data={data.dietaryComposition.map((item) => ({
+                      label: item.subject,
+                      value: item.A,
+                    }))}
+                    fillStyle={styles.columnFillGreen}
+                    styles={styles}
+                  />
+                </View>
+              )}
+            </>
           )}
         </ScrollView>
       )}
@@ -345,86 +409,390 @@ export default function AnalyticsScreen() {
   );
 }
 
+function SummaryTile({
+  colors,
+  styles,
+  icon: Icon,
+  label,
+  value,
+}: {
+  colors: any;
+  styles: ReturnType<typeof createStyles>;
+  icon: typeof Activity;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.summaryTile}>
+      <View style={styles.summaryIcon}>
+        <Icon size={16} color={colors.accent1} />
+      </View>
+      <Text style={styles.summaryValue} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.summaryLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function MetricCard({
+  colors,
+  styles,
+  icon: Icon,
+  label,
+  value,
+  subText,
+}: {
+  colors: any;
+  styles: ReturnType<typeof createStyles>;
+  icon: typeof CalendarDays;
+  label: string;
+  value: string;
+  subText: string;
+}) {
+  return (
+    <View style={styles.metricCard}>
+      <View style={styles.metricIcon}>
+        <Icon size={17} color={colors.accent1} />
+      </View>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue} numberOfLines={1}>
+        {value}
+      </Text>
+      <Text style={styles.metricSubText}>{subText}</Text>
+    </View>
+  );
+}
+
+function ColumnChart({
+  data,
+  fillStyle,
+  styles,
+}: {
+  data: { label: string; value: number }[];
+  fillStyle: any;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const maxValue = Math.max(...data.map((item) => item.value), 1);
+
+  return (
+    <View style={styles.columnChartContainer}>
+      {data.map((item, index) => {
+        const heightPercent = Math.max((item.value / maxValue) * 100, 5);
+        return (
+          <View key={`${item.label}-${index}`} style={styles.columnWrap}>
+            <Text style={styles.columnValue}>{item.value}</Text>
+            <View style={styles.columnTrack}>
+              <View style={[fillStyle, { height: `${heightPercent}%` }]} />
+            </View>
+            <Text style={styles.columnLabel} numberOfLines={1}>
+              {item.label}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function BarChart({
+  data,
+  fillStyle,
+  styles,
+}: {
+  data: { label: string; value: number; suffix?: string }[];
+  fillStyle: any;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const maxValue = Math.max(...data.map((item) => item.value), 1);
+
+  return (
+    <View style={styles.barChartContainer}>
+      {data.map((item, index) => {
+        const widthPercent = Math.max((item.value / maxValue) * 100, 4);
+        return (
+          <View key={`${item.label}-${index}`} style={styles.barChartRow}>
+            <View style={styles.barChartLabels}>
+              <Text style={styles.barCategoryLabel} numberOfLines={1}>
+                {item.label}
+              </Text>
+              <Text style={styles.barValueLabel}>
+                {item.value}
+                {item.suffix ?? ""}
+              </Text>
+            </View>
+            <View style={styles.barTrack}>
+              <View style={[fillStyle, { width: `${widthPercent}%` }]} />
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+const cleanInsight = (insight: string) =>
+  insight.replace(/^[^\w']+\s*/u, "").trim();
+
 const createStyles = (colors: any) => {
+  const isDark = colors.bg === "#000000";
+  const softAccent = isDark ? "rgba(74, 222, 128, 0.14)" : "#eaf7ef";
+  const softPurple = isDark
+    ? "rgba(139, 92, 246, 0.16)"
+    : "rgba(139, 92, 246, 0.1)";
+  const shadowColor = isDark ? "#000000" : "#102116";
+
   return StyleSheet.create({
     safeArea: {
       flex: 1,
       backgroundColor: colors.bg,
     },
-    // Header
-    headerRow: {
+    content: {
+      paddingHorizontal: 18,
+      paddingTop: 16,
+      paddingBottom: 34,
+      gap: 18,
+    },
+    topBar: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: colors.bg,
+      gap: 12,
     },
     iconButton: {
-      padding: 8,
-      marginLeft: -8,
+      width: 44,
+      height: 44,
+      borderRadius: 15,
+      backgroundColor: colors.surface1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
     },
-    headerCenter: {
+    refreshButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 15,
+      backgroundColor: softAccent,
+      borderWidth: 1,
+      borderColor: isDark ? "rgba(74, 222, 128, 0.28)" : "#ccebd8",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    titleBlock: {
       flex: 1,
-      alignItems: "center",
     },
-    headerTitleRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 8,
-    },
-    headerSpacer: {
-      width: 40,
+    eyebrow: {
+      color: colors.accent1,
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "uppercase",
     },
     title: {
-      fontSize: 18,
-      fontWeight: "800",
       color: colors.text1,
-      letterSpacing: -0.5,
-    },
-    subtitle: {
-      color: colors.text2,
-      fontSize: 12,
-      fontWeight: "500",
+      fontSize: 28,
+      fontWeight: "900",
+      lineHeight: 33,
       marginTop: 2,
     },
-    loadingWrap: {
-      flex: 1,
-      justifyContent: "center",
+    heroCard: {
+      backgroundColor: colors.surface1,
+      borderRadius: 28,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 18,
+      gap: 16,
+      shadowColor,
+      shadowOpacity: isDark ? 0 : 0.08,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 3,
+    },
+    heroHeader: {
+      flexDirection: "row",
       alignItems: "center",
+      gap: 13,
     },
-    loadingText: {
+    heroIcon: {
+      width: 56,
+      height: 56,
+      borderRadius: 19,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+    heroCopy: {
+      flex: 1,
+    },
+    sourcePill: {
+      alignSelf: "flex-start",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      borderRadius: 999,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      backgroundColor: softAccent,
+      marginBottom: 8,
+    },
+    sourceText: {
+      color: colors.accent1,
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+    heroTitle: {
+      color: colors.text1,
+      fontSize: 19,
+      fontWeight: "900",
+    },
+    heroText: {
       color: colors.text2,
-      fontSize: 14,
-      fontWeight: "500",
-      marginTop: 12,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 4,
     },
-    content: {
-      padding: 20,
-      gap: 20,
-      paddingBottom: 40,
+    summaryRow: {
+      flexDirection: "row",
+      gap: 10,
     },
-
-    // AI Insight Card
+    summaryTile: {
+      flex: 1,
+      minHeight: 98,
+      borderRadius: 18,
+      backgroundColor: colors.bg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 12,
+      justifyContent: "space-between",
+    },
+    summaryIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+    summaryValue: {
+      color: colors.text1,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+    summaryLabel: {
+      color: colors.text3,
+      fontSize: 10,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+    kpiGrid: {
+      gap: 12,
+    },
+    kpiRow: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    metricCard: {
+      flex: 1,
+      minHeight: 136,
+      backgroundColor: colors.surface1,
+      borderRadius: 22,
+      padding: 15,
+      borderWidth: 1,
+      borderColor: colors.border,
+      justifyContent: "space-between",
+    },
+    metricIcon: {
+      width: 38,
+      height: 38,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+    metricLabel: {
+      color: colors.text3,
+      fontSize: 10,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+    metricValue: {
+      color: colors.text1,
+      fontSize: 19,
+      fontWeight: "900",
+    },
+    metricSubText: {
+      color: colors.text2,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    highlightCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      backgroundColor: colors.surface1,
+      borderRadius: 22,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    highlightIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: isDark
+        ? "rgba(245, 158, 11, 0.16)"
+        : "rgba(245, 158, 11, 0.1)",
+    },
+    highlightCopy: {
+      flex: 1,
+    },
+    highlightLabel: {
+      color: colors.text3,
+      fontSize: 10,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+    highlightTitle: {
+      color: colors.text1,
+      fontSize: 15,
+      fontWeight: "900",
+      marginTop: 2,
+    },
+    highlightValue: {
+      color: "#f59e0b",
+      fontSize: 18,
+      fontWeight: "900",
+    },
     insightCard: {
       flexDirection: "row",
-      backgroundColor: "rgba(139, 92, 246, 0.1)",
+      backgroundColor: softPurple,
       borderWidth: 1,
-      borderColor: "rgba(139, 92, 246, 0.2)",
-      borderRadius: 20,
-      padding: 20,
-      gap: 16,
+      borderColor: isDark
+        ? "rgba(139, 92, 246, 0.34)"
+        : "rgba(139, 92, 246, 0.22)",
+      borderRadius: 22,
+      padding: 16,
+      gap: 12,
       alignItems: "flex-start",
+    },
+    insightIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.bg,
     },
     insightTextWrap: {
       flex: 1,
     },
     insightTitle: {
-      color: "#A78BFA",
-      fontSize: 15,
-      fontWeight: "700",
+      color: isDark ? "#c4b5fd" : "#6d28d9",
+      fontSize: 14,
+      fontWeight: "900",
       marginBottom: 8,
     },
     insightListItem: {
@@ -434,25 +802,23 @@ const createStyles = (colors: any) => {
       marginBottom: 6,
     },
     insightDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: "#8B5CF6",
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+      backgroundColor: "#8b5cf6",
       marginTop: 6,
     },
     insightBody: {
       color: colors.text1,
       fontSize: 13,
       lineHeight: 20,
-      opacity: 0.9,
       flex: 1,
+      fontWeight: "700",
     },
-
-    // Section Cards
     sectionCard: {
       backgroundColor: colors.surface1,
-      borderRadius: 20,
-      padding: 20,
+      borderRadius: 24,
+      padding: 18,
       borderWidth: 1,
       borderColor: colors.border,
       gap: 16,
@@ -460,67 +826,63 @@ const createStyles = (colors: any) => {
     sectionHeader: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 8,
+      gap: 10,
     },
     sectionTitle: {
       color: colors.text1,
-      fontSize: 17,
-      fontWeight: "700",
-      letterSpacing: -0.3,
+      fontSize: 20,
+      fontWeight: "900",
     },
     sectionSubtitle: {
       color: colors.text2,
-      fontSize: 13,
-      marginTop: -8,
-      marginBottom: 4,
+      fontSize: 12,
+      fontWeight: "700",
+      marginTop: 2,
     },
-
-    // Column Chart (Vertical Bars)
     columnChartContainer: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "flex-end",
-      height: 160,
-      paddingHorizontal: 4,
+      height: 154,
+      paddingHorizontal: 2,
     },
     columnWrap: {
-      alignItems: "center",
       flex: 1,
       height: "100%",
       justifyContent: "flex-end",
-      gap: 8,
+      alignItems: "center",
+      gap: 6,
     },
     columnValue: {
       color: colors.text2,
       fontSize: 11,
-      fontWeight: "700",
+      fontWeight: "900",
     },
     columnTrack: {
-      width: 28,
+      width: "100%",
+      maxWidth: 32,
       flex: 1,
-      backgroundColor: colors.surface2,
-      borderRadius: 6,
+      backgroundColor: colors.surface3,
+      borderRadius: 10,
       justifyContent: "flex-end",
       overflow: "hidden",
     },
     columnFill: {
       width: "100%",
       backgroundColor: colors.accent1,
-      borderRadius: 6,
+      borderRadius: 10,
     },
-    barFillSuccess: {
+    columnFillGreen: {
       width: "100%",
-      backgroundColor: "#10B981", // Success green
-      borderRadius: 6,
+      backgroundColor: "#10b981",
+      borderRadius: 10,
     },
     columnLabel: {
-      color: colors.text2,
+      color: colors.text3,
       fontSize: 10,
-      fontWeight: "600",
+      fontWeight: "800",
       textAlign: "center",
     },
-
-    // Bar Chart (Horizontal Bars)
     barChartContainer: {
       gap: 14,
     },
@@ -531,69 +893,89 @@ const createStyles = (colors: any) => {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
+      gap: 10,
     },
     barCategoryLabel: {
       color: colors.text1,
       fontSize: 13,
-      fontWeight: "600",
+      fontWeight: "800",
       flex: 1,
-      paddingRight: 10,
     },
-    barPriceLabel: {
-      color: colors.text1,
-      fontSize: 13,
-      fontWeight: "700",
+    barValueLabel: {
+      color: colors.text2,
+      fontSize: 12,
+      fontWeight: "900",
     },
     barTrack: {
-      height: 8,
-      backgroundColor: colors.surface2,
+      height: 10,
+      backgroundColor: colors.surface3,
       borderRadius: 999,
       overflow: "hidden",
     },
-    barFillAlt: {
+    barFillBlue: {
       height: "100%",
-      backgroundColor: "#3B82F6", // Blue
+      backgroundColor: "#3b82f6",
       borderRadius: 999,
     },
     barFillWarning: {
       height: "100%",
-      backgroundColor: "#F59E0B", // Amber/Warning
+      backgroundColor: "#f59e0b",
       borderRadius: 999,
     },
-
-    // Empty State
+    loadingWrap: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      gap: 10,
+    },
+    loadingText: {
+      color: colors.text2,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+    emptyStateCard: {
+      backgroundColor: colors.surface1,
+      borderRadius: 24,
+      padding: 28,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: 10,
+    },
     emptyState: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
       gap: 12,
       paddingHorizontal: 32,
+      backgroundColor: colors.bg,
     },
     emptyTitle: {
       color: colors.text1,
-      fontSize: 18,
-      fontWeight: "700",
+      fontSize: 19,
+      fontWeight: "900",
       textAlign: "center",
     },
     emptyBody: {
       color: colors.text2,
       fontSize: 14,
       textAlign: "center",
-      lineHeight: 22,
+      lineHeight: 20,
       marginBottom: 8,
     },
     primaryButton: {
+      marginTop: 8,
       backgroundColor: colors.accent1,
-      borderRadius: 14,
+      borderRadius: 16,
       paddingVertical: 14,
-      paddingHorizontal: 24,
+      paddingHorizontal: 20,
       width: "100%",
       alignItems: "center",
     },
     primaryButtonText: {
       color: colors.bg,
-      fontWeight: "700",
-      fontSize: 16,
+      fontWeight: "900",
+      fontSize: 15,
     },
   });
 };

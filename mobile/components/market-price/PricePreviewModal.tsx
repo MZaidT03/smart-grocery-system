@@ -1,19 +1,19 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
-  View,
-  Text,
+  Platform,
   Pressable,
   ScrollView,
-  TextInput,
   StyleSheet,
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  Keyboard
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { useTheme } from "@/context/theme";
-import { X, Check } from "lucide-react-native";
+import { Check, ReceiptText, Store, X } from "lucide-react-native";
 
 export type PricePreviewItem = {
   product_id: number;
@@ -37,9 +37,10 @@ export default function PricePreviewModal({
   onClose,
   results,
   onSave,
-  saving
+  saving,
 }: PricePreviewModalProps) {
   const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [editableResults, setEditableResults] = useState<PricePreviewItem[]>([]);
 
   useEffect(() => {
@@ -48,10 +49,10 @@ export default function PricePreviewModal({
     }
   }, [visible, results]);
 
-  const handlePriceChange = (index: number, val: string) => {
-    const numericVal = parseFloat(val);
+  const handlePriceChange = (index: number, value: string) => {
+    const numericValue = Number.parseFloat(value);
     const updated = [...editableResults];
-    updated[index].new_price = isNaN(numericVal) ? 0 : numericVal;
+    updated[index].new_price = Number.isNaN(numericValue) ? 0 : numericValue;
     setEditableResults(updated);
   };
 
@@ -60,51 +61,75 @@ export default function PricePreviewModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView 
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <KeyboardAvoidingView
         style={styles.modalBackdrop}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View style={[styles.modalCard, { backgroundColor: colors.bg, borderColor: colors.border }]}>
+        <View style={styles.modalCard}>
           <View style={styles.headerRow}>
-            <Text style={[styles.title, { color: colors.text1 }]}>Review Prices</Text>
-            <Pressable onPress={onClose} disabled={saving} style={styles.closeBtn}>
-              <X size={24} color={colors.text2} />
+            <View style={styles.titleWrap}>
+              <View style={styles.titleIcon}>
+                <ReceiptText size={20} color={colors.accent1} />
+              </View>
+              <View>
+                <Text style={styles.eyebrow}>Review</Text>
+                <Text style={styles.title}>Fetched prices</Text>
+              </View>
+            </View>
+            <Pressable
+              onPress={onClose}
+              disabled={saving}
+              style={styles.closeBtn}
+            >
+              <X size={22} color={colors.text2} />
             </Pressable>
           </View>
-          
-          <Text style={[styles.subtitle, { color: colors.text2 }]}>
-            Review the fetched market prices. You can manually adjust them before saving.
+
+          <Text style={styles.subtitle}>
+            Edit any price before saving it back to your pantry.
           </Text>
 
           {editableResults.length === 0 ? (
             <View style={styles.emptyWrap}>
-              <Text style={{ color: colors.text2 }}>No prices found to update.</Text>
+              <Store size={32} color={colors.text3} />
+              <Text style={styles.emptyText}>No prices found to update.</Text>
             </View>
           ) : (
-            <ScrollView 
-              style={styles.list} 
+            <ScrollView
+              style={styles.list}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
-              {editableResults.map((item, idx) => (
-                <View key={item.product_id} style={[styles.itemRow, { borderBottomColor: colors.surface2 }]}>
+              {editableResults.map((item, index) => (
+                <View key={item.product_id} style={styles.itemRow}>
                   <View style={styles.itemInfo}>
-                    <Text style={[styles.itemName, { color: colors.text1 }]} numberOfLines={1}>{item.item_name}</Text>
-                    <View style={styles.itemMetaWrap}>
-                      <Text style={[styles.itemOldPrice, { color: colors.text3 }]}>Was: <Text style={{color: colors.text2}}>Rs {item.old_price}</Text></Text>
-                      <Text style={styles.itemSource}>SOURCE: AL-FATAH ONLINE</Text>
-                    </View>
+                    <Text style={styles.itemName} numberOfLines={1}>
+                      {item.item_name}
+                    </Text>
+                    <Text style={styles.itemMeta} numberOfLines={1}>
+                      {item.category || "Uncategorized"} | was Rs{" "}
+                      {Number(item.old_price || 0).toLocaleString("en-PK")}
+                    </Text>
                   </View>
-                  <View style={[styles.inputWrap, { borderColor: colors.border, backgroundColor: colors.surface1 }]}>
-                    <Text style={{ color: colors.text2, marginRight: 4 }}>Rs</Text>
+                  <View style={styles.inputWrap}>
+                    <Text style={styles.currencyText}>Rs</Text>
                     <TextInput
                       style={styles.input}
-                      keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "numeric"}
+                      keyboardType={
+                        Platform.OS === "ios"
+                          ? "numbers-and-punctuation"
+                          : "numeric"
+                      }
                       returnKeyType="done"
                       onSubmitEditing={() => Keyboard.dismiss()}
                       value={item.new_price ? String(item.new_price) : ""}
-                      onChangeText={(val) => handlePriceChange(idx, val)}
+                      onChangeText={(value) => handlePriceChange(index, value)}
                     />
                   </View>
                 </View>
@@ -114,24 +139,27 @@ export default function PricePreviewModal({
 
           <View style={styles.footerRow}>
             <Pressable
-              style={[styles.btn, styles.cancelBtn, { borderColor: colors.border, backgroundColor: colors.surface1 }]}
+              style={styles.cancelBtn}
               onPress={onClose}
               disabled={saving}
             >
-              <Text style={[styles.btnText, { color: colors.text1 }]}>Cancel</Text>
+              <Text style={styles.cancelBtnText}>Cancel</Text>
             </Pressable>
             <Pressable
-              style={[styles.btn, styles.saveBtn]}
+              style={[
+                styles.saveBtn,
+                (saving || editableResults.length === 0) && styles.disabledBtn,
+              ]}
               onPress={handleSave}
               disabled={saving || editableResults.length === 0}
             >
               {saving ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={colors.bg} />
               ) : (
-                <Check size={18} color="#fff" />
+                <Check size={18} color={colors.bg} />
               )}
               <Text style={styles.saveBtnText}>
-                {saving ? "Saving..." : "Done & Save"}
+                {saving ? "Saving..." : "Save prices"}
               </Text>
             </Pressable>
           </View>
@@ -141,120 +169,170 @@ export default function PricePreviewModal({
   );
 }
 
-const styles = StyleSheet.create({
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
-  },
-  modalCard: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderWidth: 1,
-    padding: 24,
-    maxHeight: "85%",
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "800",
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  subtitle: {
-    fontSize: 14,
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  emptyWrap: {
-    paddingVertical: 40,
-    alignItems: "center",
-  },
-  list: {
-    marginBottom: 20,
-  },
-  itemRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  itemInfo: {
-    flex: 1,
-    paddingRight: 12,
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  itemMetaWrap: {
-    gap: 2,
-  },
-  itemOldPrice: {
-    fontSize: 12,
-  },
-  itemSource: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#52525B", // zinc-600
-    marginTop: 2,
-  },
-  inputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    width: 110,
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#10B981", // Emerald 500
-    textAlign: "right",
-  },
-  footerRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  btn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
-  },
-  cancelBtn: {
-    borderWidth: 1,
-    backgroundColor: "transparent",
-  },
-  saveBtn: {
-    backgroundColor: "#059669", // Emerald 600
-    shadowColor: "#10B981",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  btnText: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  saveBtnText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#fff",
-  },
-});
+const createStyles = (colors: any) => {
+  const isDark = colors.bg === "#000000";
+  const softAccent = isDark ? "rgba(74, 222, 128, 0.14)" : "#eaf7ef";
+
+  return StyleSheet.create({
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.62)",
+      justifyContent: "flex-end",
+    },
+    modalCard: {
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.bg,
+      padding: 20,
+      maxHeight: "86%",
+      gap: 14,
+    },
+    headerRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: 12,
+    },
+    titleWrap: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    titleIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+    eyebrow: {
+      color: colors.accent1,
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+    title: {
+      color: colors.text1,
+      fontSize: 20,
+      fontWeight: "900",
+      marginTop: 2,
+    },
+    closeBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 14,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface1,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    subtitle: {
+      color: colors.text2,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    emptyWrap: {
+      alignItems: "center",
+      paddingVertical: 34,
+      gap: 10,
+    },
+    emptyText: {
+      color: colors.text2,
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    list: {
+      marginBottom: 4,
+    },
+    itemRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      gap: 12,
+    },
+    itemInfo: {
+      flex: 1,
+      gap: 4,
+    },
+    itemName: {
+      color: colors.text1,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    itemMeta: {
+      color: colors.text2,
+      fontSize: 12,
+      fontWeight: "700",
+    },
+    inputWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface1,
+      borderRadius: 14,
+      paddingHorizontal: 10,
+      minHeight: 46,
+      width: 116,
+    },
+    currencyText: {
+      color: colors.text2,
+      fontSize: 12,
+      fontWeight: "900",
+      marginRight: 4,
+    },
+    input: {
+      flex: 1,
+      color: colors.accent1,
+      fontSize: 15,
+      fontWeight: "900",
+      textAlign: "right",
+      paddingVertical: 0,
+    },
+    footerRow: {
+      flexDirection: "row",
+      gap: 12,
+      paddingTop: 2,
+    },
+    cancelBtn: {
+      flex: 1,
+      minHeight: 52,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    cancelBtnText: {
+      color: colors.text1,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+    saveBtn: {
+      flex: 1,
+      minHeight: 52,
+      borderRadius: 16,
+      backgroundColor: colors.accent1,
+      alignItems: "center",
+      justifyContent: "center",
+      flexDirection: "row",
+      gap: 8,
+    },
+    disabledBtn: {
+      opacity: 0.62,
+    },
+    saveBtnText: {
+      color: colors.bg,
+      fontSize: 15,
+      fontWeight: "900",
+    },
+  });
+};

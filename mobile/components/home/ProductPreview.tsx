@@ -2,208 +2,298 @@ import React, { useMemo } from "react";
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
-import { useTheme } from "@/context/theme"; // Using your updated theme context
+import { useTheme } from "@/context/theme";
+import {
+  ArrowRight,
+  CircleAlert,
+  PackageCheck,
+  ShoppingBasket,
+} from "lucide-react-native";
+
+type Product = {
+  id: number | string;
+  name: string;
+  quantity: number;
+  unit: string;
+  category?: string;
+  days_left?: number;
+};
+
+type ProductPreviewProps = {
+  loading: boolean;
+  products: Product[];
+  onViewAll: () => void;
+  onPressProduct: (product: Product) => void;
+};
 
 export default function ProductPreview({
   loading,
   products,
   onViewAll,
   onPressProduct,
-}: any) {
-  // Pull the pure black/white/green minimal colors directly from the context
+}: ProductPreviewProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  // Updated to map directly to your minimal theme values
-  const toneForDays = (daysLeft: number | null | undefined) => {
-    if (daysLeft === -1 || daysLeft === undefined || daysLeft === null) {
-      return { label: "Unknown", fg: colors.text2, bg: colors.surface2 };
-    }
-    if (daysLeft < 3) {
-      return { label: "Low", fg: colors.danger, bg: colors.surface2 };
-    }
-    if (daysLeft < 7) {
-      return { label: "Watch", fg: colors.warning, bg: colors.surface2 };
-    }
-    return { label: "OK", fg: colors.accent1, bg: colors.surface2 };
-  };
-
-  const previewItems = products.slice(0, 4);
+  const previewItems = products.slice(0, 5);
 
   return (
-    <View>
+    <View style={styles.card}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Your products</Text>
+        <View>
+          <Text style={styles.eyebrow}>Inventory</Text>
+          <Text style={styles.title}>Pantry list</Text>
+        </View>
         <Pressable onPress={onViewAll} style={styles.viewAllButton}>
           <Text style={styles.viewAllText}>View all</Text>
+          <ArrowRight size={14} color={colors.text1} />
         </Pressable>
       </View>
 
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={colors.accent1} />
+          <Text style={styles.loadingText}>Loading products</Text>
         </View>
       ) : previewItems.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>No items yet</Text>
-          <Text style={styles.emptyBody}>Add a product to get started.</Text>
+          <View style={styles.emptyIcon}>
+            <ShoppingBasket size={24} color={colors.accent1} />
+          </View>
+          <Text style={styles.emptyTitle}>No pantry items yet</Text>
+          <Text style={styles.emptyBody}>
+            Add your staples and the dashboard will start tracking stock.
+          </Text>
         </View>
       ) : (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.row}
-        >
-          {previewItems.map((product: any) => {
-            const tone = toneForDays(product.days_left);
+        <View style={styles.list}>
+          {previewItems.map((product) => {
+            const tone = toneForDays(product.days_left, colors);
+            const StatusIcon = tone.urgent ? CircleAlert : PackageCheck;
             return (
               <Pressable
                 key={product.id}
-                style={styles.card}
+                style={styles.row}
                 onPress={() => onPressProduct(product)}
               >
-                <View style={styles.cardTop}>
-                  <View style={styles.cardAccent} />
-                  <View
-                    style={[styles.statusBadge, { backgroundColor: tone.bg }]}
-                  >
-                    <Text style={[styles.statusBadgeText, { color: tone.fg }]}>
+                <View
+                  style={[
+                    styles.productIcon,
+                    { backgroundColor: tone.background },
+                  ]}
+                >
+                  <StatusIcon size={18} color={tone.foreground} />
+                </View>
+
+                <View style={styles.productCopy}>
+                  <View style={styles.productTitleRow}>
+                    <Text style={styles.productName} numberOfLines={1}>
+                      {product.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.statusText,
+                        { color: tone.foreground },
+                      ]}
+                    >
                       {tone.label}
                     </Text>
                   </View>
+                  <Text style={styles.productMeta} numberOfLines={1}>
+                    {product.quantity} {product.unit}
+                    {product.category ? ` | ${product.category}` : ""}
+                  </Text>
                 </View>
 
-                <View>
-                  <Text style={styles.cardTitle} numberOfLines={1}>
-                    {product.name}
-                  </Text>
-                  <Text style={styles.cardQty}>
-                    {product.quantity} {product.unit}
-                  </Text>
-                </View>
+                <ArrowRight size={16} color={colors.text3} />
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
       )}
     </View>
   );
 }
 
-// Map everything to the new dynamic colors context
-const createStyles = (colors: any) =>
-  StyleSheet.create({
+const toneForDays = (
+  daysLeft: number | null | undefined,
+  colors: any,
+) => {
+  const softAccent =
+    colors.bg === "#000000" ? "rgba(74, 222, 128, 0.14)" : "#eaf7ef";
+  if (daysLeft === -1 || daysLeft === undefined || daysLeft === null) {
+    return {
+      label: "Unknown",
+      foreground: colors.text2,
+      background: colors.surface2,
+      urgent: false,
+    };
+  }
+  if (daysLeft < 3) {
+    return {
+      label: `${daysLeft}d left`,
+      foreground: colors.danger,
+      background:
+        colors.bg === "#000000"
+          ? "rgba(239, 68, 68, 0.14)"
+          : "rgba(220, 38, 38, 0.08)",
+      urgent: true,
+    };
+  }
+  if (daysLeft < 7) {
+    return {
+      label: `${daysLeft}d left`,
+      foreground: colors.warning,
+      background:
+        colors.bg === "#000000"
+          ? "rgba(234, 179, 8, 0.14)"
+          : "rgba(202, 138, 4, 0.1)",
+      urgent: false,
+    };
+  }
+  return {
+    label: "Stocked",
+    foreground: colors.accent1,
+    background: softAccent,
+    urgent: false,
+  };
+};
+
+const createStyles = (colors: any) => {
+  const isDark = colors.bg === "#000000";
+  const softAccent = isDark ? "rgba(74, 222, 128, 0.14)" : "#eaf7ef";
+
+  return StyleSheet.create({
+    card: {
+      backgroundColor: colors.surface1,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 18,
+      gap: 16,
+    },
     headerRow: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingHorizontal: 2,
+      gap: 12,
     },
-
+    eyebrow: {
+      color: colors.accent1,
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
     title: {
-      fontSize: 16,
-      fontWeight: "700",
+      fontSize: 22,
+      fontWeight: "900",
       color: colors.text1,
+      marginTop: 2,
     },
-
     viewAllButton: {
-      backgroundColor: colors.surface2, // Minimal secondary surface
+      minHeight: 38,
+      backgroundColor: colors.bg,
       borderRadius: 999,
-      paddingHorizontal: 14,
-      paddingVertical: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
       borderWidth: 1,
       borderColor: colors.border,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
     },
-
     viewAllText: {
-      color: colors.text1, // High contrast text instead of loud accent color
-      fontWeight: "600",
+      color: colors.text1,
+      fontWeight: "800",
       fontSize: 12,
     },
-
-    row: {
-      paddingTop: 12,
-      gap: 12,
-      paddingRight: 20, // Prevents cutoff on horizontal scroll
+    loadingWrap: {
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 32,
+      gap: 10,
     },
-
-    card: {
-      backgroundColor: colors.surface1,
-      borderRadius: 18,
-      padding: 16,
-      width: 150,
-      height: 140, // Slightly more compact and squarish for a modern grid feel
-      justifyContent: "space-between",
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-
-    cardTop: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "flex-start",
-    },
-
-    cardAccent: {
-      width: 24,
-      height: 4,
-      borderRadius: 999,
-      backgroundColor: colors.accent1, // Brand Green
-      marginTop: 8,
-    },
-
-    cardTitle: {
-      fontSize: 15,
-      fontWeight: "700",
-      color: colors.text1,
-      marginBottom: 2,
-    },
-
-    cardQty: {
+    loadingText: {
       color: colors.text2,
       fontSize: 13,
-      fontWeight: "500",
-    },
-
-    statusBadge: {
-      borderRadius: 999,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderWidth: 1,
-      borderColor: colors.border, // Crisp border for the badge
-    },
-
-    statusBadgeText: {
-      fontSize: 10,
       fontWeight: "700",
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
     },
-
-    loadingWrap: {
-      paddingVertical: 40,
-    },
-
     emptyState: {
       alignItems: "center",
-      paddingTop: 30,
-      paddingBottom: 10,
+      paddingVertical: 28,
+      gap: 9,
     },
-
+    emptyIcon: {
+      width: 54,
+      height: 54,
+      borderRadius: 18,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
     emptyTitle: {
-      fontSize: 16,
-      fontWeight: "600",
+      fontSize: 17,
+      fontWeight: "900",
       color: colors.text1,
     },
-
     emptyBody: {
       color: colors.text2,
-      marginTop: 6,
-      fontSize: 14,
+      textAlign: "center",
+      fontSize: 13,
+      lineHeight: 19,
+      maxWidth: 260,
+    },
+    list: {
+      gap: 10,
+    },
+    row: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      minHeight: 72,
+      borderRadius: 18,
+      backgroundColor: colors.bg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    productIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    productCopy: {
+      flex: 1,
+      gap: 5,
+    },
+    productTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    productName: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: "900",
+      color: colors.text1,
+    },
+    statusText: {
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+    productMeta: {
+      color: colors.text2,
+      fontSize: 13,
+      fontWeight: "600",
     },
   });
+};

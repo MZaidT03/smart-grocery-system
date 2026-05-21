@@ -15,7 +15,7 @@ import BudgetCard from "@/components/home/BudgetCard";
 import HomeHeader from "@/components/home/HomeHeader";
 import ProductPreview from "@/components/home/ProductPreview";
 import QuickActions from "@/components/home/QuickActions";
-import { useTheme } from "@/context/theme"; // Using your updated theme context
+import { useTheme } from "@/context/theme";
 
 type CatalogItem = {
   consumption_unit?: string;
@@ -49,10 +49,7 @@ type QuickActionKey =
   | "analytics";
 
 export default function HomeScreen() {
-  // Pull the active high-end minimal colors directly from the context
   const { colors } = useTheme();
-
-  // Pass the colors to our StyleSheet
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   const router = useRouter();
@@ -63,7 +60,6 @@ export default function HomeScreen() {
   const displayName = Array.isArray(params.name) ? params.name[0] : params.name;
 
   const [loading, setLoading] = useState(true);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [products, setProducts] = useState<Product[]>([]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
   const [budget, setBudget] = useState<BudgetStatus | null>(null);
@@ -90,6 +86,38 @@ export default function HomeScreen() {
     return Array.from(new Set(values)).slice(0, 8);
   }, [catalog]);
 
+  const fetchProducts = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/products?userId=${userId}`);
+      const data = await res.json();
+      setProducts(Array.isArray(data) ? data : []);
+    } catch {
+      setProducts([]);
+    }
+  }, [userId]);
+
+  const fetchCatalog = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/catalog`);
+      const data = await res.json();
+      setCatalog(Array.isArray(data) ? data : []);
+    } catch {
+      setCatalog([]);
+    }
+  }, []);
+
+  const fetchBudget = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/budget?userId=${userId}`);
+      const data = await res.json();
+      setBudget(data);
+    } catch {
+      setBudget(null);
+    }
+  }, [userId]);
+
   useFocusEffect(
     useCallback(() => {
       if (!userId) {
@@ -101,40 +129,8 @@ export default function HomeScreen() {
         setLoading(false);
       };
       load();
-    }, [userId, refreshTrigger])
+    }, [fetchBudget, fetchCatalog, fetchProducts, userId]),
   );
-
-  const fetchProducts = async () => {
-    if (!userId) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/products?userId=${userId}`);
-      const data = await res.json();
-      setProducts(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setProducts([]);
-    }
-  };
-
-  const fetchCatalog = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/catalog`);
-      const data = await res.json();
-      setCatalog(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setCatalog([]);
-    }
-  };
-
-  const fetchBudget = async () => {
-    if (!userId) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/budget?userId=${userId}`);
-      const data = await res.json();
-      setBudget(data);
-    } catch (err) {
-      setBudget(null);
-    }
-  };
 
   const handleAddProduct = async () => {
     if (!userId) return;
@@ -172,8 +168,8 @@ export default function HomeScreen() {
       setProductPrice("");
       setShelfLife("7");
       setShowAddModal(false);
-      setRefreshTrigger((prev) => prev + 1);
-    } catch (err) {
+      await Promise.all([fetchProducts(), fetchBudget()]);
+    } catch {
       Alert.alert("Add failed", "Server error. Try again.");
     }
   };
@@ -196,7 +192,7 @@ export default function HomeScreen() {
       }
       setBudgetLimit("");
       await fetchBudget();
-    } catch (err) {
+    } catch {
       Alert.alert("Budget update failed", "Server error. Try again.");
     }
   };
@@ -208,6 +204,15 @@ export default function HomeScreen() {
         item.days_left !== undefined &&
         item.days_left !== -1 &&
         item.days_left < 3,
+    ).length;
+  }, [products]);
+
+  const watchListCount = useMemo(() => {
+    return products.filter(
+      (item) =>
+        item.days_left !== undefined &&
+        item.days_left !== -1 &&
+        item.days_left < 7,
     ).length;
   }, [products]);
 
@@ -275,6 +280,7 @@ export default function HomeScreen() {
           displayName={displayName}
           totalItems={totalItems}
           lowStockCount={lowStockCount}
+          watchListCount={watchListCount}
           budgetStatus={budget?.status}
           onAddPress={() => setShowAddModal(true)}
           onProfilePress={() =>
@@ -286,13 +292,6 @@ export default function HomeScreen() {
         />
 
         <QuickActions onAction={handleQuickAction} />
-
-        <BudgetCard
-          budget={budget}
-          budgetLimit={budgetLimit}
-          onBudgetLimitChange={setBudgetLimit}
-          onSaveBudget={handleSetBudget}
-        />
 
         <ProductPreview
           loading={loading}
@@ -312,6 +311,13 @@ export default function HomeScreen() {
               },
             })
           }
+        />
+
+        <BudgetCard
+          budget={budget}
+          budgetLimit={budgetLimit}
+          onBudgetLimitChange={setBudgetLimit}
+          onSaveBudget={handleSetBudget}
         />
       </ScrollView>
 
@@ -342,41 +348,55 @@ export default function HomeScreen() {
   );
 }
 
-// Updated to map to your new minimal Theme Colors (bg, text1, text2, accent1, etc.)
-const createStyles = (colors: any) =>
-  StyleSheet.create({
+const createStyles = (colors: any) => {
+  const isDark = colors.bg === "#000000";
+  const shadowColor = isDark ? "#000000" : "#102116";
+
+  return StyleSheet.create({
     safeArea: {
       flex: 1,
       backgroundColor: colors.bg,
     },
     scrollContent: {
-      padding: 20,
-      paddingBottom: 30,
-      gap: 18,
+      paddingHorizontal: 18,
+      paddingTop: 16,
+      paddingBottom: 34,
+      gap: 20,
     },
     emptyState: {
+      flex: 1,
       alignItems: "center",
-      gap: 8,
-      paddingVertical: 40,
+      justifyContent: "center",
+      gap: 10,
+      paddingHorizontal: 24,
+      backgroundColor: colors.bg,
     },
     emptyTitle: {
-      fontSize: 18,
-      fontWeight: "600",
+      fontSize: 22,
+      fontWeight: "900",
       color: colors.text1,
     },
     emptyBody: {
       color: colors.text2,
+      fontSize: 14,
     },
     primaryButton: {
-      backgroundColor: colors.accent1, // Brand Green
+      marginTop: 10,
+      backgroundColor: colors.accent1,
       borderRadius: 16,
-      paddingVertical: 10,
-      paddingHorizontal: 16,
+      paddingVertical: 13,
+      paddingHorizontal: 18,
       alignItems: "center",
+      shadowColor,
+      shadowOpacity: isDark ? 0 : 0.14,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 3,
     },
     primaryButtonText: {
-      color: colors.bg, // Makes text white in light mode, pure black in dark mode
+      color: colors.bg,
       fontSize: 14,
-      fontWeight: "600",
+      fontWeight: "900",
     },
   });
+};

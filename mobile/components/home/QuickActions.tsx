@@ -1,187 +1,218 @@
 import React, { useMemo } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { useTheme } from "@/context/theme"; // Using your updated theme context
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useTheme } from "@/context/theme";
+import {
+  BarChart3,
+  ChefHat,
+  Search,
+  ShoppingBasket,
+  TrendingUp,
+} from "lucide-react-native";
 
-// We use RGBA here to create a "glass" effect over your pure black/white backgrounds
-const buildActions = (scheme: "light" | "dark") => [
+type QuickActionKey =
+  | "recipes"
+  | "prices"
+  | "shopping"
+  | "forecast"
+  | "analytics";
+
+type QuickAction = {
+  key: QuickActionKey;
+  title: string;
+  subtitle: string;
+  icon: typeof ChefHat;
+  accent: string;
+};
+
+const actions: QuickAction[] = [
   {
     key: "recipes",
     title: "Recipes",
-    subtitle: "Smart cook",
-    tone:
-      scheme === "dark"
-        ? {
-            bg: "rgba(245, 158, 11, 0.1)",
-            border: "rgba(245, 158, 11, 0.5)",
-            accent: "#fbbf24",
-          } // Amber
-        : {
-            bg: "rgba(245, 158, 11, 0.08)",
-            border: "rgba(245, 158, 11, 0.4)",
-            accent: "#f59e0b",
-          },
+    subtitle: "Cook from stock",
+    icon: ChefHat,
+    accent: "#f59e0b",
   },
   {
     key: "prices",
     title: "Prices",
-    subtitle: "Market trends",
-    tone:
-      scheme === "dark"
-        ? {
-            bg: "rgba(59, 130, 246, 0.1)",
-            border: "rgba(59, 130, 246, 0.5)",
-            accent: "#60a5fa",
-          } // Blue
-        : {
-            bg: "rgba(59, 130, 246, 0.08)",
-            border: "rgba(59, 130, 246, 0.4)",
-            accent: "#3b82f6",
-          },
+    subtitle: "Market scan",
+    icon: Search,
+    accent: "#3b82f6",
   },
   {
     key: "shopping",
     title: "Shopping",
     subtitle: "Auto list",
-    tone:
-      scheme === "dark"
-        ? {
-            bg: "rgba(16, 185, 129, 0.1)",
-            border: "rgba(16, 185, 129, 0.5)",
-            accent: "#34d399",
-          } // Emerald (Brand)
-        : {
-            bg: "rgba(16, 185, 129, 0.08)",
-            border: "rgba(16, 185, 129, 0.4)",
-            accent: "#10b981",
-          },
+    icon: ShoppingBasket,
+    accent: "#10b981",
   },
   {
     key: "forecast",
     title: "Forecast",
-    subtitle: "Usage trend",
-    tone:
-      scheme === "dark"
-        ? {
-            bg: "rgba(139, 92, 246, 0.1)",
-            border: "rgba(139, 92, 246, 0.5)",
-            accent: "#a78bfa",
-          } // Purple
-        : {
-            bg: "rgba(139, 92, 246, 0.08)",
-            border: "rgba(139, 92, 246, 0.4)",
-            accent: "#8b5cf6",
-          },
+    subtitle: "Usage demand",
+    icon: TrendingUp,
+    accent: "#8b5cf6",
   },
   {
     key: "analytics",
     title: "Analytics",
-    subtitle: "Insights & trends",
-    tone:
-      scheme === "dark"
-        ? {
-            bg: "rgba(236, 72, 153, 0.1)",
-            border: "rgba(236, 72, 153, 0.5)",
-            accent: "#f472b6",
-          } // Pink
-        : {
-            bg: "rgba(236, 72, 153, 0.08)",
-            border: "rgba(236, 72, 153, 0.4)",
-            accent: "#ec4899",
-          },
+    subtitle: "Spend patterns",
+    icon: BarChart3,
+    accent: "#ec4899",
   },
 ];
 
-export default function QuickActions({ onAction }: any) {
-  // Pull the colors and scheme from your minimal theme context
+export default function QuickActions({
+  onAction,
+}: {
+  onAction: (key: QuickActionKey) => void;
+}) {
   const { colors, scheme } = useTheme();
-  const styles = useMemo(() => createStyles(colors), [colors]);
-  const actions = useMemo(() => buildActions(scheme), [scheme]);
+  const styles = useMemo(() => createStyles(colors, scheme), [colors, scheme]);
 
   return (
-    <View>
+    <View style={styles.section}>
       <View style={styles.headerRow}>
-        <Text style={styles.title}>Quick actions</Text>
-        <Text style={styles.meta}>Swipe</Text>
+        <View>
+          <Text style={styles.eyebrow}>Shortcuts</Text>
+          <Text style={styles.title}>Move quickly</Text>
+        </View>
       </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.row}
-      >
-        {actions.map((action) => (
-          <Pressable
-            key={action.key}
-            style={[
-              styles.card,
-              {
-                backgroundColor: action.tone.bg,
-                borderColor: action.tone.border,
-              },
-            ]}
-            onPress={() => onAction(action.key)}
-          >
-            <View
+
+      <View style={styles.grid}>
+        {actions.map((action) => {
+          const Icon = action.icon;
+          return (
+            <Pressable
+              key={action.key}
               style={[
-                styles.accentBar,
-                { backgroundColor: action.tone.accent },
+                styles.card,
+                action.key === "analytics" && styles.wideCard,
+                {
+                  borderColor: toneBorder(action.accent, scheme),
+                  backgroundColor: toneBackground(action.accent, scheme),
+                },
               ]}
-            />
-            <Text style={styles.cardTitle}>{action.title}</Text>
-            <Text style={styles.cardSub}>{action.subtitle}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+              onPress={() => onAction(action.key)}
+            >
+              <View style={styles.cardTop}>
+                <View
+                  style={[
+                    styles.iconWrap,
+                    { backgroundColor: toneIcon(action.accent, scheme) },
+                  ]}
+                >
+                  <Icon size={20} color={action.accent} />
+                </View>
+                <View
+                  style={[
+                    styles.statusDot,
+                    { backgroundColor: action.accent },
+                  ]}
+                />
+              </View>
+              <Text style={styles.cardTitle}>{action.title}</Text>
+              <Text style={styles.cardSub}>{action.subtitle}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
-// Mapped dynamically to your global colors
-const createStyles = (colors: any) =>
+const hexToRgb = (hex: string) => {
+  const clean = hex.replace("#", "");
+  const value = Number.parseInt(clean, 16);
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255,
+  };
+};
+
+const rgba = (hex: string, alpha: number) => {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const toneBackground = (hex: string, scheme: "light" | "dark") =>
+  rgba(hex, scheme === "dark" ? 0.13 : 0.08);
+
+const toneBorder = (hex: string, scheme: "light" | "dark") =>
+  rgba(hex, scheme === "dark" ? 0.35 : 0.22);
+
+const toneIcon = (hex: string, scheme: "light" | "dark") =>
+  rgba(hex, scheme === "dark" ? 0.18 : 0.12);
+
+const createStyles = (colors: any, scheme: "light" | "dark") =>
   StyleSheet.create({
+    section: {
+      gap: 12,
+    },
     headerRow: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingHorizontal: 2, // Slight indent alignment
+      paddingHorizontal: 2,
+    },
+    eyebrow: {
+      color: colors.accent1,
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "uppercase",
     },
     title: {
-      fontSize: 16,
-      fontWeight: "700",
+      fontSize: 22,
+      fontWeight: "900",
       color: colors.text1,
+      marginTop: 2,
     },
-    meta: {
-      color: colors.text3,
-      fontSize: 12,
-      fontWeight: "500",
-      textTransform: "uppercase",
-      letterSpacing: 0.5,
-    },
-    row: {
-      paddingTop: 12,
+    grid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
       gap: 12,
-      paddingRight: 20, // Ensures the last item doesn't get cut off on scroll
     },
     card: {
-      borderRadius: 18,
-      padding: 16,
-      minWidth: 140,
-      borderWidth: 1, // Uses the 50% opacity colored borders from buildActions
-      gap: 10,
+      width: "47.5%",
+      minHeight: 126,
+      borderRadius: 20,
+      padding: 14,
+      borderWidth: 1,
+      justifyContent: "space-between",
     },
-    accentBar: {
-      width: 32,
-      height: 4,
-      borderRadius: 999,
-      marginBottom: 4, // Pushes the text down slightly
+    wideCard: {
+      width: "100%",
+      minHeight: 116,
+    },
+    cardTop: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+    },
+    iconWrap: {
+      width: 42,
+      height: 42,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    statusDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      opacity: scheme === "dark" ? 0.9 : 0.75,
     },
     cardTitle: {
       color: colors.text1,
-      fontWeight: "700",
-      fontSize: 15,
+      fontWeight: "900",
+      fontSize: 16,
+      marginTop: 10,
     },
     cardSub: {
       color: colors.text2,
-      marginTop: 2,
+      marginTop: 3,
       fontSize: 13,
+      fontWeight: "600",
     },
   });

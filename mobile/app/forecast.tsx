@@ -1,11 +1,12 @@
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/context/theme";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Pressable,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -13,15 +14,22 @@ import {
   View,
 } from "react-native";
 import {
-  ArrowLeft,
-  TrendingUp,
-  Calendar,
   Activity,
-  Zap,
-  Waves,
+  ArrowLeft,
   Box,
-  AlertCircle,
+  BrainCircuit,
+  ChartNoAxesCombined,
+  ChevronRight,
+  CircleAlert,
+  Clock3,
+  Gauge,
+  History,
+  PackageCheck,
   RefreshCw,
+  Sparkles,
+  TrendingUp,
+  Waves,
+  Zap,
 } from "lucide-react-native";
 
 type Product = {
@@ -41,7 +49,7 @@ type ForecastResponse = {
     unit?: string;
     stock?: number;
   };
-  history?: Array<{ date: string; quantity: number }>;
+  history?: { date: string; quantity: number }[];
   forecast?: {
     daily_usage?: number;
     seasonal_points?: number[];
@@ -51,11 +59,19 @@ type ForecastResponse = {
   message?: string;
 };
 
+type ForecastMode = "trend" | "seasonal";
+
+type ChartBarItem = {
+  value: number;
+  label: string;
+};
+
 export default function ForecastScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const router = useRouter();
   const params = useLocalSearchParams();
+
   const userId = Array.isArray(params.userId)
     ? params.userId[0]
     : params.userId;
@@ -65,24 +81,24 @@ export default function ForecastScreen() {
     null,
   );
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
-
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingForecast, setLoadingForecast] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeTab, setActiveTab] = useState<ForecastMode>("seasonal");
 
-  // NEW: Tab State ('trend' or 'seasonal')
-  const [activeTab, setActiveTab] = useState<"trend" | "seasonal">("seasonal");
-
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     if (!userId) {
       setLoadingProducts(false);
       return;
     }
+
     setLoadingProducts(true);
+
     try {
       const res = await fetch(`${API_BASE_URL}/products?userId=${userId}`);
       const data = await res.json();
-      const list = Array.isArray(data) ? data : [];
+      const list: Product[] = Array.isArray(data) ? data : [];
+
       setProducts(list);
 
       if (!selectedProductId && list.length > 0) {
@@ -90,92 +106,129 @@ export default function ForecastScreen() {
           list.find(
             (item) => item.days_left !== undefined && item.days_left !== -1,
           ) ?? list[0];
+
         setSelectedProductId(String(defaultProduct.id));
       }
-    } catch (err) {
+    } catch {
       setProducts([]);
     } finally {
       setLoadingProducts(false);
     }
-  };
+  }, [selectedProductId, userId]);
 
-  const fetchForecast = async (productId: string, isRefresh = false) => {
-    if (!productId) return;
-    if (isRefresh) setRefreshing(true);
-    else setLoadingForecast(true);
+  const fetchForecast = useCallback(
+    async (productId: string, isRefresh = false) => {
+      if (!productId) return;
 
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/analytics/forecast/${productId}`,
-      );
-      const data: ForecastResponse = await res.json();
-      setForecast(data);
-    } catch (err) {
-      setForecast(null);
-      Alert.alert("Forecast failed", "Could not load forecast data.");
-    } finally {
-      setLoadingForecast(false);
-      setRefreshing(false);
-    }
-  };
+      if (isRefresh) setRefreshing(true);
+      else setLoadingForecast(true);
+
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/analytics/forecast/${productId}`,
+        );
+        const data: ForecastResponse = await res.json();
+
+        setForecast(data);
+      } catch {
+        setForecast(null);
+        Alert.alert("Forecast failed", "Could not load forecast data.");
+      } finally {
+        setLoadingForecast(false);
+        setRefreshing(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     fetchProducts();
-  }, [userId]);
+  }, [fetchProducts]);
 
   useEffect(() => {
     if (!selectedProductId) return;
+
     fetchForecast(selectedProductId);
-  }, [selectedProductId]);
+  }, [fetchForecast, selectedProductId]);
 
   const selectedProduct = useMemo(
     () => products.find((item) => String(item.id) === selectedProductId),
     [products, selectedProductId],
   );
 
-  // Process Chart Data (History vs Forecast based on Tab)
   const chartData = useMemo(() => {
-    if (!forecast || !forecast.success) return null;
+    if (!forecast?.success) return null;
 
-    // Get last 7 days of history for mobile view
     const history = forecast.history?.slice(-7) || [];
-
-    // Generate 7 days of forecast
-    const projected = [];
-    const flatRate = forecast.forecast?.daily_usage || 0;
+    const flatRate = Number(forecast.forecast?.daily_usage || 0);
     const seasonal = forecast.forecast?.seasonal_points || [];
 
-    for (let i = 0; i < 7; i++) {
-      let val = flatRate;
-      if (activeTab === "seasonal" && seasonal.length > i) {
-        val = seasonal[i];
+    const projected = Array.from({ length: 7 }, (_, index) => {
+      if (activeTab === "seasonal" && seasonal.length > index) {
+        return Number(seasonal[index]) || 0;
       }
-      projected.push(val);
-    }
+
+      return flatRate;
+    });
 
     const allValues = [
-      ...history.map((h) => Number(h.quantity) || 0),
-      ...projected.map(Number),
+      ...history.map((item) => Number(item.quantity) || 0),
+      ...projected,
     ];
+
     const max = Math.max(...allValues, 1);
 
-    return { history, projected, max };
-  }, [forecast, activeTab]);
+    const lastHistoryDate =
+      history.length > 0
+        ? new Date(history[history.length - 1].date)
+        : new Date();
+
+    const historyBars: ChartBarItem[] = history.map((item) => ({
+      value: Number(item.quantity) || 0,
+      label: formatChartDate(item.date),
+    }));
+
+    const projectedBars: ChartBarItem[] = projected.map((value, index) => {
+      const nextDate = new Date(lastHistoryDate);
+      nextDate.setDate(lastHistoryDate.getDate() + index + 1);
+
+      return {
+        value,
+        label: formatChartDate(nextDate.toISOString()),
+      };
+    });
+
+    return { historyBars, projectedBars, max };
+  }, [activeTab, forecast]);
 
   const usagePerDay = Number(forecast?.forecast?.daily_usage || 0);
-  const smartDaysLeft = Number(forecast?.smart_days_left ?? 0);
-
-  // Calculate progress bar percentage (assuming 14 days is "100% full health")
+  const smartDaysLeft = Math.max(0, Number(forecast?.smart_days_left ?? 0));
   const runOutPercentage = Math.min((smartDaysLeft / 14) * 100, 100);
   const isCritical = smartDaysLeft <= 3;
+
+  const lowStockCount = products.filter(
+    (item) =>
+      item.days_left !== undefined &&
+      item.days_left !== -1 &&
+      item.days_left < 7,
+  ).length;
+
+  const methodLabel = forecast?.forecast?.method || "Forecast model";
+
+  const refreshSelectedForecast = () => {
+    if (selectedProductId) {
+      fetchForecast(selectedProductId, true);
+    }
+  };
 
   if (!userId) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.emptyState}>
-          <AlertCircle size={48} color={colors.text3} />
+          <CircleAlert size={48} color={colors.text3} />
           <Text style={styles.emptyTitle}>Session expired</Text>
           <Text style={styles.emptyBody}>Please log in again to continue.</Text>
+
           <Pressable
             style={styles.primaryButton}
             onPress={() => router.replace("/login")}
@@ -189,91 +242,187 @@ export default function ForecastScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} style={styles.iconButton}>
-          <ArrowLeft size={24} color={colors.text1} />
-        </Pressable>
-        <View style={styles.headerCenter}>
-          <View style={styles.headerTitleRow}>
-            <TrendingUp size={20} color="#F59E0B" />
-            <Text style={styles.title}>Smart Forecast</Text>
-          </View>
-          <Text style={styles.subtitle}>Predicting your future needs</Text>
-        </View>
-        <View style={styles.headerSpacer} />
-      </View>
-
       {loadingProducts ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={colors.accent1} />
+          <Text style={styles.loadingText}>Loading forecasts</Text>
         </View>
       ) : (
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={refreshSelectedForecast}
+              tintColor={colors.accent1}
+            />
+          }
         >
-          {/* Horizontal Product Selector */}
-          <View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.pillRow}
+          <View style={styles.topBar}>
+            <Pressable onPress={() => router.back()} style={styles.iconButton}>
+              <ArrowLeft size={20} color={colors.text1} />
+            </Pressable>
+
+            <View style={styles.titleBlock}>
+              <Text style={styles.eyebrow}>Forecasting</Text>
+              <Text style={styles.title}>Smart forecast</Text>
+            </View>
+
+            <Pressable
+              style={styles.refreshButton}
+              onPress={refreshSelectedForecast}
+              disabled={!selectedProductId || loadingForecast}
             >
-              {products.map((product) => {
-                const active = String(product.id) === selectedProductId;
-                return (
-                  <Pressable
-                    key={String(product.id)}
-                    style={[
-                      styles.productPill,
-                      active && styles.productPillActive,
-                    ]}
-                    onPress={() => setSelectedProductId(String(product.id))}
-                  >
-                    <Text
-                      style={[
-                        styles.productPillText,
-                        active && styles.productPillTextActive,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {product.name}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+              <RefreshCw size={18} color={colors.accent1} />
+            </Pressable>
           </View>
 
-          {!selectedProduct ? (
-            <View style={styles.emptyStateCard}>
-              <Box size={40} color={colors.surface3} />
-              <Text style={styles.emptyTitle}>No product selected</Text>
-              <Text style={styles.emptyBody}>
-                Add products to your inventory to generate forecasts.
-              </Text>
+          <View style={styles.heroCard}>
+            <View style={styles.heroHeader}>
+              <View style={styles.heroIcon}>
+                <BrainCircuit size={25} color={colors.accent1} />
+              </View>
+
+              <View style={styles.heroCopy}>
+                <View style={styles.sourcePill}>
+                  <Sparkles size={13} color={colors.accent1} />
+                  <Text style={styles.sourceText}>Demand model</Text>
+                </View>
+
+                <Text style={styles.heroTitle}>Predict pantry demand</Text>
+
+                <Text style={styles.heroText}>
+                  Compare usage history with projected consumption to plan
+                  restocks before items run out.
+                </Text>
+              </View>
             </View>
-          ) : loadingForecast ? (
+
+            <View style={styles.summaryRow}>
+              <SummaryTile
+                colors={colors}
+                styles={styles}
+                icon={PackageCheck}
+                label="Tracked"
+                value={String(products.length)}
+              />
+
+              <SummaryTile
+                colors={colors}
+                styles={styles}
+                icon={CircleAlert}
+                label="Watch"
+                value={String(lowStockCount)}
+              />
+
+              <SummaryTile
+                colors={colors}
+                styles={styles}
+                icon={Gauge}
+                label="Model"
+                value={activeTab === "seasonal" ? "Seasonal" : "Trend"}
+              />
+            </View>
+          </View>
+
+          <View style={styles.selectorPanel}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Choose item</Text>
+              <Text style={styles.sectionMeta}>{products.length} products</Text>
+            </View>
+
+            {products.length === 0 ? (
+              <View style={styles.emptyStateCard}>
+                <Box size={40} color={colors.text3} />
+
+                <Text style={styles.emptyTitle}>No products yet</Text>
+
+                <Text style={styles.emptyBody}>
+                  Add products to your inventory to generate forecasts.
+                </Text>
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.pillRow}
+              >
+                {products.map((product) => {
+                  const active = String(product.id) === selectedProductId;
+
+                  return (
+                    <Pressable
+                      key={String(product.id)}
+                      style={[
+                        styles.productPill,
+                        active && styles.productPillActive,
+                      ]}
+                      onPress={() => setSelectedProductId(String(product.id))}
+                    >
+                      <View
+                        style={[
+                          styles.productPillIcon,
+                          active && styles.productPillIconActive,
+                        ]}
+                      >
+                        <PackageCheck
+                          size={15}
+                          color={active ? colors.bg : colors.accent1}
+                        />
+                      </View>
+
+                      <View style={styles.productPillCopy}>
+                        <Text
+                          style={[
+                            styles.productPillText,
+                            active && styles.productPillTextActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {product.name}
+                        </Text>
+
+                        <Text
+                          style={[
+                            styles.productPillMeta,
+                            active && styles.productPillMetaActive,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {product.quantity ?? 0} {product.unit || "units"}
+                        </Text>
+                      </View>
+
+                      {active && (
+                        <ChevronRight size={16} color={colors.accent1} />
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+
+          {!selectedProduct ? null : loadingForecast ? (
             <View style={styles.loadingCard}>
               <ActivityIndicator size="large" color={colors.accent1} />
-              <Text style={styles.loadingText}>
-                running @analysis_engine...
-              </Text>
+              <Text style={styles.loadingText}>Running forecast model</Text>
             </View>
           ) : !forecast?.success || !chartData ? (
             <View style={styles.emptyStateCard}>
-              <AlertCircle size={40} color={colors.warning} />
+              <CircleAlert size={40} color={colors.warning} />
+
               <Text style={styles.emptyTitle}>Forecast unavailable</Text>
+
               <Text style={styles.emptyBody}>
                 {forecast?.message ||
                   "This item needs more consumption history to generate a reliable prediction."}
               </Text>
+
               <Pressable
                 style={styles.secondaryButton}
-                onPress={() =>
-                  selectedProductId && fetchForecast(selectedProductId, true)
-                }
+                onPress={refreshSelectedForecast}
               >
                 <RefreshCw size={16} color={colors.text1} />
                 <Text style={styles.secondaryButtonText}>Try again</Text>
@@ -281,15 +430,46 @@ export default function ForecastScreen() {
             </View>
           ) : (
             <>
-              {/* Main Chart Panel */}
+              <View style={styles.selectedCard}>
+                <View style={styles.selectedIcon}>
+                  <Clock3
+                    size={20}
+                    color={isCritical ? colors.danger : colors.accent1}
+                  />
+                </View>
+
+                <View style={styles.selectedCopy}>
+                  <Text style={styles.selectedLabel}>Selected forecast</Text>
+
+                  <Text style={styles.selectedTitle} numberOfLines={1}>
+                    {forecast.product?.name || selectedProduct.name}
+                  </Text>
+                </View>
+
+                <View
+                  style={[
+                    styles.daysBadge,
+                    isCritical && styles.daysBadgeCritical,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.daysBadgeText,
+                      isCritical && styles.daysBadgeTextCritical,
+                    ]}
+                  >
+                    {formatDaysLeft(smartDaysLeft)}
+                  </Text>
+                </View>
+              </View>
+
               <View style={styles.chartPanel}>
                 <View style={styles.chartHeader}>
                   <View style={styles.chartTitleWrap}>
-                    <Calendar size={18} color="#3B82F6" />
-                    <Text style={styles.chartTitle}>Timeline</Text>
+                    <ChartNoAxesCombined size={18} color={colors.accent1} />
+                    <Text style={styles.chartTitle}>Usage timeline</Text>
                   </View>
 
-                  {/* Segmented Control */}
                   <View style={styles.segmentedControl}>
                     <Pressable
                       style={[
@@ -298,6 +478,13 @@ export default function ForecastScreen() {
                       ]}
                       onPress={() => setActiveTab("trend")}
                     >
+                      <TrendingUp
+                        size={13}
+                        color={
+                          activeTab === "trend" ? colors.bg : colors.text2
+                        }
+                      />
+
                       <Text
                         style={[
                           styles.segmentText,
@@ -307,24 +494,26 @@ export default function ForecastScreen() {
                         Trend
                       </Text>
                     </Pressable>
+
                     <Pressable
                       style={[
                         styles.segmentBtn,
-                        activeTab === "seasonal" && styles.segmentBtnActiveAlt,
+                        activeTab === "seasonal" && styles.segmentBtnActive,
                       ]}
                       onPress={() => setActiveTab("seasonal")}
                     >
                       <Waves
-                        size={12}
+                        size={13}
                         color={
-                          activeTab === "seasonal" ? "#F59E0B" : colors.text2
+                          activeTab === "seasonal" ? colors.bg : colors.text2
                         }
                       />
+
                       <Text
                         style={[
                           styles.segmentText,
                           activeTab === "seasonal" &&
-                            styles.segmentTextActiveAlt,
+                          styles.segmentTextActive,
                         ]}
                       >
                         Seasonal
@@ -333,123 +522,95 @@ export default function ForecastScreen() {
                   </View>
                 </View>
 
-                {/* Custom Bar Chart Visualization */}
                 <View style={styles.barChartContainer}>
-                  {/* Left Side: History */}
-                  <View style={styles.chartHalf}>
-                    <Text style={styles.chartAxisLabel}>History</Text>
-                    <View style={styles.barsWrap}>
-                      {chartData.history.map((pt, idx) => {
-                        const hPct = Math.max(
-                          (Number(pt.quantity) / chartData.max) * 100,
-                          4,
-                        );
-                        return (
-                          <View key={`hist-${idx}`} style={styles.barCol}>
-                            <View style={styles.barTrack}>
-                              <View
-                                style={[
-                                  styles.barFillHistory,
-                                  { height: `${hPct}%` },
-                                ]}
-                              />
-                            </View>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </View>
+                  <ForecastBars
+                    label="History"
+                    data={chartData.historyBars}
+                    max={chartData.max}
+                    fillStyle={styles.barFillHistory}
+                    styles={styles}
+                  />
 
-                  {/* Divider */}
                   <View style={styles.chartDivider}>
-                    <View style={styles.dividerLine} />
-                    <Text style={styles.dividerText}>Now</Text>
+                    <Text style={styles.dividerText}>-</Text>
                   </View>
 
-                  {/* Right Side: Forecast */}
-                  <View style={styles.chartHalf}>
-                    <Text style={styles.chartAxisLabel}>Forecast</Text>
-                    <View style={styles.barsWrap}>
-                      {chartData.projected.map((val, idx) => {
-                        const hPct = Math.max(
-                          (Number(val) / chartData.max) * 100,
-                          4,
-                        );
-                        return (
-                          <View key={`proj-${idx}`} style={styles.barCol}>
-                            <View style={styles.barTrack}>
-                              <View
-                                style={[
-                                  activeTab === "seasonal"
-                                    ? styles.barFillSeasonal
-                                    : styles.barFillTrend,
-                                  { height: `${hPct}%` },
-                                ]}
-                              />
-                            </View>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </View>
+                  <ForecastBars
+                    label="Forecast"
+                    data={chartData.projectedBars}
+                    max={chartData.max}
+                    fillStyle={
+                      activeTab === "seasonal"
+                        ? styles.barFillSeasonal
+                        : styles.barFillTrend
+                    }
+                    styles={styles}
+                  />
                 </View>
 
-                {/* Context Box */}
                 <View style={styles.contextBox}>
-                  <Activity
-                    size={14}
-                    color={colors.text2}
-                    style={{ marginTop: 2 }}
-                  />
+                  <Activity size={15} color={colors.text2} />
+
                   <Text style={styles.contextText}>
                     {activeTab === "seasonal"
-                      ? "The Seasonal Model detects patterns (e.g., weekends) to predict variable daily needs."
-                      : "The Average Trend Model assumes constant daily usage based on your weighted history."}
+                      ? "Seasonal mode adjusts the forecast when usage patterns rise or dip across the week."
+                      : "Trend mode uses your average daily consumption as a steady baseline."}
                   </Text>
                 </View>
               </View>
 
-              {/* Metrics Grid */}
               <View style={styles.metricsGrid}>
-                {/* Consumption Card */}
                 <View style={styles.metricCard}>
-                  <Text style={styles.metricLabel}>Avg Daily Consumption</Text>
+                  <View style={styles.metricIcon}>
+                    <History size={18} color={colors.accent1} />
+                  </View>
+
+                  <Text style={styles.metricLabel}>Avg daily use</Text>
+
                   <Text style={styles.metricValue}>
-                    {usagePerDay.toFixed(2)}{" "}
+                    {usagePerDay.toFixed(2)}
                     <Text style={styles.metricUnit}>
+                      {" "}
                       {forecast.product?.unit || "units"}
                     </Text>
                   </Text>
-                  <View style={styles.metricBadge}>
-                    <Text style={styles.metricBadgeText}>30-day history</Text>
-                  </View>
+
+                  <Text style={styles.metricSubText}>{methodLabel}</Text>
                 </View>
 
-                {/* Run-Out Card */}
                 <View style={styles.metricCard}>
-                  <Text style={styles.metricLabel}>Predicted Run-Out</Text>
+                  <View
+                    style={[
+                      styles.metricIcon,
+                      isCritical && styles.metricIconCritical,
+                    ]}
+                  >
+                    <Clock3
+                      size={18}
+                      color={isCritical ? colors.danger : colors.accent1}
+                    />
+                  </View>
+
+                  <Text style={styles.metricLabel}>Predicted run-out</Text>
+
                   <View style={styles.runOutRow}>
                     <Text
                       style={[
                         styles.runOutValue,
-                        isCritical
-                          ? { color: "#EF4444" }
-                          : { color: "#10B981" },
+                        isCritical && styles.runOutValueCritical,
                       ]}
                     >
                       {smartDaysLeft}
                     </Text>
+
                     <Text style={styles.runOutSub}>days left</Text>
                   </View>
 
-                  {/* Progress Bar */}
                   <View style={styles.progressBarTrack}>
                     <View
                       style={[
                         styles.progressBarFill,
-                        isCritical
-                          ? { backgroundColor: "#EF4444" }
-                          : { backgroundColor: "#10B981" },
+                        isCritical && styles.progressBarFillCritical,
                         { width: `${runOutPercentage}%` },
                       ]}
                     />
@@ -457,15 +618,18 @@ export default function ForecastScreen() {
                 </View>
               </View>
 
-              {/* AI Insight Card */}
               <View style={styles.insightCard}>
-                <Zap size={24} color="#8B5CF6" />
+                <View style={styles.insightIcon}>
+                  <Zap size={20} color="#8b5cf6" />
+                </View>
+
                 <View style={styles.insightTextWrap}>
-                  <Text style={styles.insightTitle}>AI Insight</Text>
+                  <Text style={styles.insightTitle}>AI insight</Text>
+
                   <Text style={styles.insightBody}>
                     {activeTab === "seasonal"
-                      ? "Analysis complete. Detected a recurring usage pattern (Seasonality) in your history."
-                      : "Analysis complete. Your consumption is relatively stable over the last 30 days."}
+                      ? "Seasonal analysis is active, so the next seven days can vary instead of repeating one flat rate."
+                      : "Trend analysis is active, so the forecast is using a stable daily consumption rate."}
                   </Text>
                 </View>
               </View>
@@ -477,329 +641,872 @@ export default function ForecastScreen() {
   );
 }
 
-const createStyles = (colors: any) =>
-  StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: colors.bg },
-    headerRow: {
+function SummaryTile({
+  colors,
+  styles,
+  icon: Icon,
+  label,
+  value,
+}: {
+  colors: any;
+  styles: ReturnType<typeof createStyles>;
+  icon: typeof PackageCheck;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.summaryTile}>
+      <View style={styles.summaryIcon}>
+        <Icon size={16} color={colors.accent1} />
+      </View>
+
+      <Text style={styles.summaryValue} numberOfLines={1}>
+        {value}
+      </Text>
+
+      <Text style={styles.summaryLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function ForecastBars({
+  label,
+  data,
+  max,
+  fillStyle,
+  styles,
+}: {
+  label: string;
+  data: ChartBarItem[];
+  max: number;
+  fillStyle: any;
+  styles: ReturnType<typeof createStyles>;
+}) {
+  const paddedData =
+    data.length > 0
+      ? data
+      : Array.from({ length: 7 }, (_, index) => ({
+        value: 0,
+        label: `D${index + 1}`,
+      }));
+
+  return (
+    <View style={styles.chartHalf}>
+      <View style={styles.chartGroupHeader}>
+        <Text style={styles.chartAxisLabel}>{label}</Text>
+
+        <Text style={styles.chartAxisHint}>
+          {label === "History" ? "Actual used" : "Expected use"}
+        </Text>
+      </View>
+
+      <View style={styles.barsWrap}>
+        {paddedData.map((item, index) => {
+          const value = Number(item.value) || 0;
+          const heightPercent = Math.max((value / max) * 100, 6);
+
+          return (
+            <View key={`${label}-${index}`} style={styles.barCol}>
+              <Text style={styles.barValue} numberOfLines={1}>
+                {value % 1 === 0 ? value : value.toFixed(1)}
+              </Text>
+
+              <View style={styles.barTrack}>
+                <View style={[fillStyle, { height: `${heightPercent}%` }]} />
+              </View>
+
+              <Text style={styles.barDateLabel} numberOfLines={1}>
+                {item.label}
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+const formatDaysLeft = (days: number) => {
+  if (days <= 0) return "Today";
+  if (days === 1) return "1 day";
+  return `${days} days`;
+};
+
+const formatChartDate = (dateString: string) => {
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) return "--";
+
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+};
+
+const createStyles = (colors: any) => {
+  const isDark = colors.bg === "#000000";
+
+  const softAccent = isDark ? "rgba(74, 222, 128, 0.14)" : "#eaf7ef";
+
+  const softDanger = isDark
+    ? "rgba(239, 68, 68, 0.14)"
+    : "rgba(220, 38, 38, 0.08)";
+
+  const softPurple = isDark
+    ? "rgba(139, 92, 246, 0.16)"
+    : "rgba(139, 92, 246, 0.1)";
+
+  const shadowColor = isDark ? "#000000" : "#102116";
+
+  return StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
+
+    content: {
+      paddingHorizontal: 18,
+      paddingTop: 16,
+      paddingBottom: 34,
+      gap: 18,
+    },
+
+    topBar: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: colors.bg,
+      gap: 12,
     },
-    iconButton: { padding: 8, marginLeft: -8 },
-    headerCenter: { flex: 1, alignItems: "center" },
-    headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-    headerSpacer: { width: 40 },
-    title: {
-      fontSize: 18,
-      fontWeight: "800",
-      color: colors.text1,
-      letterSpacing: -0.5,
-    },
-    subtitle: {
-      color: colors.text2,
-      fontSize: 12,
-      fontWeight: "500",
-      marginTop: 2,
-    },
-    loadingWrap: { flex: 1, justifyContent: "center", alignItems: "center" },
-    content: { padding: 20, gap: 20, paddingBottom: 40 },
 
-    // Selectors
-    pillRow: { gap: 10, paddingVertical: 4 },
-    productPill: {
+    iconButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 15,
       backgroundColor: colors.surface1,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 12,
-      paddingVertical: 10,
-      paddingHorizontal: 16,
+      alignItems: "center",
+      justifyContent: "center",
     },
+
+    refreshButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 15,
+      backgroundColor: softAccent,
+      borderWidth: 1,
+      borderColor: isDark ? "rgba(74, 222, 128, 0.28)" : "#ccebd8",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    titleBlock: {
+      flex: 1,
+    },
+
+    eyebrow: {
+      color: colors.accent1,
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+
+    title: {
+      color: colors.text1,
+      fontSize: 28,
+      fontWeight: "900",
+      lineHeight: 33,
+      marginTop: 2,
+    },
+
+    heroCard: {
+      backgroundColor: colors.surface1,
+      borderRadius: 28,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 18,
+      gap: 16,
+      shadowColor,
+      shadowOpacity: isDark ? 0 : 0.08,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 12 },
+      elevation: 3,
+    },
+
+    heroHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 13,
+    },
+
+    heroIcon: {
+      width: 56,
+      height: 56,
+      borderRadius: 19,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+
+    heroCopy: {
+      flex: 1,
+    },
+
+    sourcePill: {
+      alignSelf: "flex-start",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      borderRadius: 999,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      backgroundColor: softAccent,
+      marginBottom: 8,
+    },
+
+    sourceText: {
+      color: colors.accent1,
+      fontSize: 11,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+
+    heroTitle: {
+      color: colors.text1,
+      fontSize: 19,
+      fontWeight: "900",
+    },
+
+    heroText: {
+      color: colors.text2,
+      fontSize: 13,
+      lineHeight: 19,
+      marginTop: 4,
+    },
+
+    summaryRow: {
+      flexDirection: "row",
+      gap: 10,
+    },
+
+    summaryTile: {
+      flex: 1,
+      minHeight: 98,
+      borderRadius: 18,
+      backgroundColor: colors.bg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 12,
+      justifyContent: "space-between",
+    },
+
+    summaryIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+
+    summaryValue: {
+      color: colors.text1,
+      fontSize: 16,
+      fontWeight: "900",
+    },
+
+    summaryLabel: {
+      color: colors.text3,
+      fontSize: 10,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+
+    selectorPanel: {
+      backgroundColor: colors.surface1,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 14,
+      gap: 12,
+    },
+
+    sectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+
+    sectionTitle: {
+      color: colors.text1,
+      fontSize: 20,
+      fontWeight: "900",
+    },
+
+    sectionMeta: {
+      color: colors.text3,
+      fontSize: 12,
+      fontWeight: "800",
+      textTransform: "uppercase",
+    },
+
+    pillRow: {
+      gap: 10,
+      paddingRight: 4,
+    },
+
+    productPill: {
+      width: 188,
+      minHeight: 70,
+      backgroundColor: colors.bg,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 18,
+      padding: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+
     productPillActive: {
-      backgroundColor: colors.surface2,
+      backgroundColor: softAccent,
       borderColor: colors.accent1,
     },
-    productPillText: { color: colors.text2, fontWeight: "600", fontSize: 14 },
-    productPillTextActive: { color: colors.text1, fontWeight: "700" },
 
-    // Main Chart Panel
+    productPillIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 13,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+
+    productPillIconActive: {
+      backgroundColor: colors.accent1,
+    },
+
+    productPillCopy: {
+      flex: 1,
+      gap: 3,
+    },
+
+    productPillText: {
+      color: colors.text1,
+      fontWeight: "900",
+      fontSize: 14,
+    },
+
+    productPillTextActive: {
+      color: colors.text1,
+    },
+
+    productPillMeta: {
+      color: colors.text3,
+      fontWeight: "700",
+      fontSize: 12,
+    },
+
+    productPillMetaActive: {
+      color: colors.text2,
+    },
+
+    selectedCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      backgroundColor: colors.surface1,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 14,
+    },
+
+    selectedIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+
+    selectedCopy: {
+      flex: 1,
+    },
+
+    selectedLabel: {
+      color: colors.text3,
+      fontSize: 10,
+      fontWeight: "900",
+      textTransform: "uppercase",
+    },
+
+    selectedTitle: {
+      color: colors.text1,
+      fontSize: 16,
+      fontWeight: "900",
+      marginTop: 2,
+    },
+
+    daysBadge: {
+      borderRadius: 999,
+      backgroundColor: softAccent,
+      paddingHorizontal: 11,
+      paddingVertical: 7,
+    },
+
+    daysBadgeCritical: {
+      backgroundColor: softDanger,
+    },
+
+    daysBadgeText: {
+      color: colors.accent1,
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    daysBadgeTextCritical: {
+      color: colors.danger,
+    },
+
     chartPanel: {
       backgroundColor: colors.surface1,
       borderRadius: 24,
-      padding: 20,
+      padding: 18,
       borderWidth: 1,
       borderColor: colors.border,
-      gap: 20,
+      gap: 16,
     },
-    chartHeader: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "center",
-    },
-    chartTitleWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
-    chartTitle: { color: colors.text1, fontSize: 16, fontWeight: "700" },
 
-    // Segmented Control
+    chartHeader: {
+      gap: 14,
+    },
+
+    chartTitleWrap: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+
+    chartTitle: {
+      color: colors.text1,
+      fontSize: 20,
+      fontWeight: "900",
+    },
+
     segmentedControl: {
       flexDirection: "row",
       backgroundColor: colors.bg,
-      borderRadius: 8,
+      borderRadius: 16,
       padding: 4,
       borderWidth: 1,
       borderColor: colors.border,
       gap: 4,
     },
+
     segmentBtn: {
+      flex: 1,
+      minHeight: 40,
+      borderRadius: 13,
       flexDirection: "row",
       alignItems: "center",
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 6,
-      gap: 4,
+      justifyContent: "center",
+      gap: 6,
     },
-    segmentBtnActive: { backgroundColor: colors.surface2 },
-    segmentBtnActiveAlt: {
-      backgroundColor: "rgba(245, 158, 11, 0.15)",
-      borderWidth: 1,
-      borderColor: "rgba(245, 158, 11, 0.3)",
-    },
-    segmentText: { color: colors.text2, fontSize: 12, fontWeight: "600" },
-    segmentTextActive: { color: colors.text1 },
-    segmentTextActiveAlt: { color: "#F59E0B" },
 
-    // Bar Chart
+    segmentBtnActive: {
+      backgroundColor: colors.accent1,
+    },
+
+    segmentText: {
+      color: colors.text2,
+      fontSize: 13,
+      fontWeight: "900",
+    },
+
+    segmentTextActive: {
+      color: colors.bg,
+    },
+
     barChartContainer: {
       flexDirection: "row",
-      height: 180,
+      height: 250,
       alignItems: "flex-end",
+      backgroundColor: colors.bg,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 12,
+      paddingTop: 16,
+      paddingBottom: 20,
+      shadowColor: shadowColor,
+      shadowOpacity: isDark ? 0 : 0.04,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 6 },
+      elevation: 2,
     },
-    chartHalf: { flex: 1, height: "100%", justifyContent: "flex-end" },
-    barsWrap: {
-      flexDirection: "row",
-      justifyContent: "space-between",
-      alignItems: "flex-end",
-      height: "100%",
-      paddingTop: 20,
-    },
-    chartAxisLabel: {
-      position: "absolute",
-      top: -10,
-      left: 0,
-      color: colors.text3,
-      fontSize: 10,
-      textTransform: "uppercase",
-      fontWeight: "700",
-      letterSpacing: 0.5,
-    },
-    barCol: { flex: 1, alignItems: "center", paddingHorizontal: 2 },
-    barTrack: {
-      width: "100%",
-      maxWidth: 16,
+
+    chartHalf: {
+      flex: 1,
       height: "100%",
       justifyContent: "flex-end",
     },
+
+    chartGroupHeader: {
+      marginBottom: 12,
+      gap: 2,
+    },
+
+    chartAxisLabel: {
+      color: colors.text1,
+      fontSize: 12,
+      textTransform: "uppercase",
+      fontWeight: "900",
+      letterSpacing: 0.5,
+    },
+
+    chartAxisHint: {
+      color: colors.text3,
+      fontSize: 10,
+      fontWeight: "700",
+    },
+
+    barsWrap: {
+      flexDirection: "row",
+      alignItems: "flex-end",
+      justifyContent: "space-between",
+      height: "76%",
+      gap: 3,
+    },
+
+    barCol: {
+      flex: 1,
+      alignItems: "center",
+      height: "100%",
+      justifyContent: "flex-end",
+      gap: 5,
+    },
+
+    barValue: {
+      color: colors.text2,
+      fontSize: 10,
+      fontWeight: "800",
+      maxWidth: 34,
+      marginBottom: 2,
+    },
+
+    barTrack: {
+      width: "100%",
+      maxWidth: 22,
+      flex: 1,
+      justifyContent: "flex-end",
+      backgroundColor: isDark ? "rgba(255,255,255,0.03)" : colors.surface3,
+      borderRadius: 6,
+      overflow: "hidden",
+      borderWidth: 1,
+      borderColor: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.04)",
+    },
+
+    barDateLabel: {
+      color: colors.text3,
+      fontSize: 9,
+      fontWeight: "800",
+      transform: [{ rotate: "-45deg" }, { translateX: -4 }, { translateY: 4 }],
+      width: 44,
+      textAlign: "center",
+      marginTop: 8,
+    },
+
     barFillHistory: {
       width: "100%",
-      backgroundColor: "#10B981",
-      borderRadius: 4,
-      opacity: 0.7,
+      backgroundColor: colors.accent1,
+      borderTopLeftRadius: 4,
+      borderTopRightRadius: 4,
+      opacity: 0.85,
     },
+
     barFillTrend: {
       width: "100%",
-      backgroundColor: "#3B82F6",
-      borderRadius: 4,
+      backgroundColor: "#3b82f6",
+      borderTopLeftRadius: 4,
+      borderTopRightRadius: 4,
     },
+
     barFillSeasonal: {
       width: "100%",
-      backgroundColor: "#F59E0B",
-      borderRadius: 4,
+      backgroundColor: "#f59e0b",
+      borderTopLeftRadius: 4,
+      borderTopRightRadius: 4,
     },
 
     chartDivider: {
-      width: 40,
+      width: 28,
       height: "100%",
       alignItems: "center",
       justifyContent: "flex-end",
-      paddingBottom: 10,
-    },
-    dividerLine: {
-      position: "absolute",
-      height: "100%",
-      width: 1,
-      backgroundColor: colors.border,
-      borderStyle: "dashed",
-    },
-    dividerText: {
-      backgroundColor: colors.surface1,
-      color: colors.text3,
-      fontSize: 10,
-      paddingVertical: 2,
-      paddingHorizontal: 4,
-      fontWeight: "700",
+      paddingBottom: 40,
     },
 
-    // Context Box
+    dividerLine: {
+      position: "absolute",
+      height: "75%",
+      bottom: 28,
+      width: 0,
+      borderLeftWidth: 1,
+      borderLeftColor: colors.border,
+      borderStyle: "dashed",
+    },
+
+    dividerText: {
+      color: colors.text3,
+      backgroundColor: colors.surface1,
+      fontSize: 10,
+      fontWeight: "900",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: "hidden",
+    },
+
     contextBox: {
       flexDirection: "row",
       backgroundColor: colors.bg,
       padding: 12,
-      borderRadius: 12,
+      borderRadius: 16,
       borderWidth: 1,
       borderColor: colors.border,
       gap: 8,
     },
-    contextText: { flex: 1, color: colors.text2, fontSize: 12, lineHeight: 18 },
 
-    // Metrics
-    metricsGrid: { gap: 16 },
+    contextText: {
+      flex: 1,
+      color: colors.text2,
+      fontSize: 12,
+      lineHeight: 18,
+      fontWeight: "700",
+    },
+
+    metricsGrid: {
+      gap: 12,
+    },
+
     metricCard: {
       backgroundColor: colors.surface1,
-      borderRadius: 20,
-      padding: 20,
+      borderRadius: 24,
+      padding: 18,
       borderWidth: 1,
       borderColor: colors.border,
+      gap: 10,
     },
+
+    metricIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: softAccent,
+    },
+
+    metricIconCritical: {
+      backgroundColor: softDanger,
+    },
+
     metricLabel: {
-      color: colors.text2,
+      color: colors.text3,
       fontSize: 11,
-      fontWeight: "700",
+      fontWeight: "900",
       textTransform: "uppercase",
-      letterSpacing: 0.8,
-      marginBottom: 8,
     },
+
     metricValue: {
       color: colors.text1,
-      fontSize: 32,
+      fontSize: 34,
+      fontWeight: "900",
+    },
+
+    metricUnit: {
+      color: colors.text3,
+      fontSize: 15,
       fontWeight: "800",
-      fontFamily: "System",
     },
-    metricUnit: { color: colors.text3, fontSize: 16, fontWeight: "600" },
-    metricBadge: {
-      alignSelf: "flex-start",
-      backgroundColor: "rgba(16, 185, 129, 0.1)",
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
-      marginTop: 8,
+
+    metricSubText: {
+      color: colors.text2,
+      fontSize: 13,
+      fontWeight: "700",
     },
-    metricBadgeText: { color: "#10B981", fontSize: 10, fontWeight: "700" },
 
     runOutRow: {
       flexDirection: "row",
       alignItems: "baseline",
       gap: 8,
-      marginBottom: 12,
     },
-    runOutValue: { fontSize: 36, fontWeight: "800", fontFamily: "System" },
-    runOutSub: { color: colors.text2, fontSize: 14, fontWeight: "600" },
+
+    runOutValue: {
+      color: colors.accent1,
+      fontSize: 36,
+      fontWeight: "900",
+    },
+
+    runOutValueCritical: {
+      color: colors.danger,
+    },
+
+    runOutSub: {
+      color: colors.text2,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+
     progressBarTrack: {
       width: "100%",
-      height: 8,
-      backgroundColor: colors.surface2,
+      height: 9,
+      backgroundColor: colors.surface3,
       borderRadius: 999,
       overflow: "hidden",
     },
-    progressBarFill: { height: "100%", borderRadius: 999 },
 
-    // Insight Card
+    progressBarFill: {
+      height: "100%",
+      borderRadius: 999,
+      backgroundColor: colors.accent1,
+    },
+
+    progressBarFillCritical: {
+      backgroundColor: colors.danger,
+    },
+
     insightCard: {
       flexDirection: "row",
-      backgroundColor: "rgba(139, 92, 246, 0.1)",
+      backgroundColor: softPurple,
       borderWidth: 1,
-      borderColor: "rgba(139, 92, 246, 0.2)",
-      borderRadius: 20,
-      padding: 20,
-      gap: 16,
+      borderColor: isDark
+        ? "rgba(139, 92, 246, 0.34)"
+        : "rgba(139, 92, 246, 0.22)",
+      borderRadius: 22,
+      padding: 16,
+      gap: 12,
       alignItems: "center",
     },
-    insightTextWrap: { flex: 1 },
-    insightTitle: {
-      color: "#A78BFA",
-      fontSize: 14,
-      fontWeight: "700",
-      marginBottom: 4,
+
+    insightIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 15,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.bg,
     },
+
+    insightTextWrap: {
+      flex: 1,
+    },
+
+    insightTitle: {
+      color: isDark ? "#c4b5fd" : "#6d28d9",
+      fontSize: 14,
+      fontWeight: "900",
+      marginBottom: 3,
+    },
+
     insightBody: {
       color: colors.text1,
       fontSize: 13,
-      lineHeight: 20,
-      opacity: 0.9,
+      lineHeight: 19,
+      fontWeight: "700",
     },
 
-    // Empty & Loading
+    loadingWrap: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      gap: 10,
+    },
+
+    loadingCard: {
+      backgroundColor: colors.surface1,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 24,
+      padding: 34,
+      alignItems: "center",
+      gap: 12,
+    },
+
+    loadingText: {
+      color: colors.text2,
+      fontSize: 14,
+      fontWeight: "800",
+    },
+
     emptyStateCard: {
       backgroundColor: colors.surface1,
-      borderRadius: 20,
-      padding: 32,
+      borderRadius: 24,
+      padding: 28,
       alignItems: "center",
       borderWidth: 1,
       borderColor: colors.border,
-      gap: 12,
+      gap: 10,
     },
+
     emptyState: {
       flex: 1,
       alignItems: "center",
       justifyContent: "center",
       gap: 12,
       paddingHorizontal: 32,
+      backgroundColor: colors.bg,
     },
+
     emptyTitle: {
       color: colors.text1,
-      fontSize: 18,
-      fontWeight: "700",
+      fontSize: 19,
+      fontWeight: "900",
       textAlign: "center",
     },
+
     emptyBody: {
       color: colors.text2,
       fontSize: 14,
       textAlign: "center",
-      lineHeight: 22,
+      lineHeight: 20,
       marginBottom: 8,
     },
-    loadingCard: {
-      backgroundColor: colors.surface1,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 20,
-      padding: 32,
-      alignItems: "center",
-      gap: 16,
-    },
-    loadingText: {
-      color: colors.text2,
-      fontSize: 14,
-      fontWeight: "500",
-      fontFamily: "System",
-    },
 
-    // Buttons
     primaryButton: {
+      marginTop: 8,
       backgroundColor: colors.accent1,
-      borderRadius: 14,
+      borderRadius: 16,
       paddingVertical: 14,
-      paddingHorizontal: 24,
+      paddingHorizontal: 20,
       width: "100%",
       alignItems: "center",
     },
-    primaryButtonText: { color: colors.bg, fontWeight: "700", fontSize: 16 },
+
+    primaryButtonText: {
+      color: colors.bg,
+      fontWeight: "900",
+      fontSize: 15,
+    },
+
     secondaryButton: {
       flexDirection: "row",
       backgroundColor: colors.surface2,
       borderWidth: 1,
       borderColor: colors.border,
-      borderRadius: 100,
+      borderRadius: 999,
       paddingVertical: 12,
-      paddingHorizontal: 20,
+      paddingHorizontal: 18,
       alignItems: "center",
       gap: 8,
     },
+
     secondaryButtonText: {
       color: colors.text1,
-      fontWeight: "600",
+      fontWeight: "900",
       fontSize: 14,
     },
   });
+};
