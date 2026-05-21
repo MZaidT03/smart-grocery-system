@@ -1,6 +1,7 @@
 import { Link } from "expo-router";
 import React, { useMemo } from "react";
 import {
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -28,27 +29,30 @@ import {
   Zap,
 } from "lucide-react-native";
 
+// 1. Explicitly type the tone to satisfy TypeScript
+type Tone = "success" | "warning" | "danger";
+
 const pantryItems = [
   {
     name: "Rice",
     amount: "12 kg",
     status: "Healthy",
     fill: "84%",
-    type: "success",
+    type: "success" as Tone,
   },
   {
     name: "Milk",
     amount: "2 packs",
     status: "2 days left",
     fill: "38%",
-    type: "warning",
+    type: "warning" as Tone,
   },
   {
     name: "Tomatoes",
     amount: "1.4 kg",
     status: "Use today",
     fill: "18%",
-    type: "danger",
+    type: "danger" as Tone,
   },
 ] as const;
 
@@ -92,7 +96,8 @@ export default function LandingScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  const getToneColor = (type: string) => {
+  // 2. Use the strict Tone type
+  const getToneColor = (type: Tone) => {
     if (type === "danger") return colors.danger;
     if (type === "warning") return colors.warning;
     return colors.success;
@@ -141,15 +146,34 @@ export default function LandingScreen() {
 
           <View style={styles.buttonRow}>
             <Link href="/register" asChild>
-              <Pressable style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>Start Free</Text>
-                <ArrowRight size={18} color={colors.bg} strokeWidth={2.8} />
+              {/* 3. Re-introduced interaction feedback for a premium feel */}
+              <Pressable style={styles.buttonFlex}>
+                {({ pressed }) => (
+                  <View
+                    style={[
+                      styles.primaryButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.primaryButtonText}>Start Free</Text>
+                    <ArrowRight size={18} color={colors.bg} strokeWidth={2.8} />
+                  </View>
+                )}
               </Pressable>
             </Link>
 
             <Link href="/login" asChild>
-              <Pressable style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>Login</Text>
+              <Pressable style={styles.buttonFlex}>
+                {({ pressed }) => (
+                  <View
+                    style={[
+                      styles.secondaryButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                  >
+                    <Text style={styles.secondaryButtonText}>Login</Text>
+                  </View>
+                )}
               </Pressable>
             </Link>
           </View>
@@ -259,7 +283,11 @@ export default function LandingScreen() {
                 </Text>
               </View>
 
-              <CheckCircle2 size={21} color={colors.success} strokeWidth={2.6} />
+              <CheckCircle2
+                size={21}
+                color={colors.success}
+                strokeWidth={2.6}
+              />
             </View>
           </View>
         </View>
@@ -285,15 +313,17 @@ export default function LandingScreen() {
         {/* Feature Section */}
         <View style={styles.featureSection}>
           <View style={styles.sectionHeader}>
-            <View>
-              <Text style={styles.sectionKicker}>Why it matters</Text>
-              <Text style={styles.sectionTitle}>
-                A modern grocery system for real households.
-              </Text>
-            </View>
+            <View style={styles.sectionTitleRow}>
+              <View style={styles.sectionIcon}>
+                <BarChart3 size={20} color={colors.accent1} strokeWidth={2.4} />
+              </View>
 
-            <View style={styles.sectionIcon}>
-              <BarChart3 size={20} color={colors.accent1} strokeWidth={2.4} />
+              <View style={styles.sectionTextWrap}>
+                <Text style={styles.sectionKicker}>Why it matters</Text>
+                <Text style={styles.sectionTitle}>
+                  A modern grocery system for real households.
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -345,7 +375,7 @@ export default function LandingScreen() {
   );
 }
 
-const createStyles = (colors: any) => {
+const createStyles = (colors: Record<string, string>) => {
   const isDark =
     colors.bg === "#000000" ||
     colors.bg === "#0B0B0B" ||
@@ -361,21 +391,41 @@ const createStyles = (colors: any) => {
     ? "rgba(74, 222, 128, 0.07)"
     : "rgba(16, 185, 129, 0.06)";
 
-  const cardShadow = {
-    shadowColor,
-    shadowOpacity: isDark ? 0.2 : 0.08,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 5,
-  };
+  const cardShadow = Platform.select({
+    ios: {
+      shadowColor,
+      shadowOpacity: isDark ? 0.2 : 0.08,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 14 },
+    },
+    android: {
+      elevation: 5,
+    },
+    default: {
+      shadowColor,
+      shadowOpacity: isDark ? 0.2 : 0.08,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 14 },
+    },
+  });
 
-  const strongShadow = {
-    shadowColor,
-    shadowOpacity: isDark ? 0.26 : 0.14,
-    shadowRadius: 34,
-    shadowOffset: { width: 0, height: 20 },
-    elevation: 8,
-  };
+  const strongShadow = Platform.select({
+    ios: {
+      shadowColor,
+      shadowOpacity: isDark ? 0.26 : 0.14,
+      shadowRadius: 34,
+      shadowOffset: { width: 0, height: 20 },
+    },
+    android: {
+      elevation: 8,
+    },
+    default: {
+      shadowColor,
+      shadowOpacity: isDark ? 0.26 : 0.14,
+      shadowRadius: 34,
+      shadowOffset: { width: 0, height: 20 },
+    },
+  });
 
   return StyleSheet.create({
     safeArea: {
@@ -444,7 +494,7 @@ const createStyles = (colors: any) => {
       position: "absolute",
       width: 210,
       height: 210,
-      borderRadius: 999,
+      borderRadius: 105,
       backgroundColor: softAccent,
       top: -80,
       right: -70,
@@ -454,7 +504,7 @@ const createStyles = (colors: any) => {
       position: "absolute",
       width: 170,
       height: 170,
-      borderRadius: 999,
+      borderRadius: 85,
       backgroundColor: ultraSoftAccent,
       left: -90,
       bottom: 160,
@@ -506,8 +556,11 @@ const createStyles = (colors: any) => {
       marginTop: 24,
     },
 
-    primaryButton: {
+    buttonFlex: {
       flex: 1,
+    },
+
+    primaryButton: {
       minHeight: 56,
       borderRadius: 18,
       backgroundColor: colors.accent1,
@@ -540,6 +593,11 @@ const createStyles = (colors: any) => {
       color: colors.text1,
       fontSize: 15,
       fontWeight: "800",
+    },
+
+    buttonPressed: {
+      opacity: 0.8,
+      transform: [{ scale: 0.97 }],
     },
 
     heroTrustRow: {
@@ -819,10 +877,27 @@ const createStyles = (colors: any) => {
     },
 
     sectionHeader: {
+      width: "100%",
+    },
+
+    sectionTitleRow: {
       flexDirection: "row",
       alignItems: "flex-start",
-      justifyContent: "space-between",
-      gap: 14,
+      gap: 12,
+    },
+
+    sectionTextWrap: {
+      flex: 1,
+    },
+
+    sectionIcon: {
+      width: 46,
+      height: 46,
+      borderRadius: 16,
+      backgroundColor: softAccent,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 2,
     },
 
     sectionKicker: {
@@ -836,20 +911,10 @@ const createStyles = (colors: any) => {
 
     sectionTitle: {
       color: colors.text1,
-      fontSize: 24,
+      fontSize: 23,
       fontWeight: "900",
       lineHeight: 29,
-      letterSpacing: -0.8,
-      flex: 1,
-    },
-
-    sectionIcon: {
-      width: 45,
-      height: 45,
-      borderRadius: 16,
-      backgroundColor: softAccent,
-      alignItems: "center",
-      justifyContent: "center",
+      letterSpacing: -0.7,
     },
 
     featureList: {
@@ -911,9 +976,7 @@ const createStyles = (colors: any) => {
       borderRadius: 18,
       alignItems: "center",
       justifyContent: "center",
-      backgroundColor: isDark
-        ? "rgba(0,0,0,0.22)"
-        : "rgba(255,255,255,0.22)",
+      backgroundColor: isDark ? "rgba(0,0,0,0.22)" : "rgba(255,255,255,0.22)",
     },
 
     budgetTextWrap: {
