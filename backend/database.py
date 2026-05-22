@@ -57,6 +57,18 @@ def init_db():
                     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
                 )''')
 
+    # 3b. MANUAL CONSUMPTION LOGS (For personalized smart suggestions)
+    c.execute('''CREATE TABLE IF NOT EXISTS manual_consumption_logs (
+                    log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    consumed_quantity REAL NOT NULL,
+                    consumption_date DATE NOT NULL,
+                    consumption_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+                )''')
+
     # 4. CONSUMPTION SUMMARY
     c.execute('''CREATE TABLE IF NOT EXISTS consumption_summary (
                     summary_id INTEGER PRIMARY KEY AUTOINCREMENT,

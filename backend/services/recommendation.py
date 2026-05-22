@@ -1,7 +1,7 @@
 import sqlite3
 import pandas as pd
-from collections import Counter
-from itertools import combinations
+# pyrefly: ignore [missing-import]
+from efficient_apriori import apriori
 import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -12,119 +12,89 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def get_market_basket_recommendations(target_item_name, limit=3):
-    """
-    Analyzes consumption history to find items frequently consumed together 
-    on the same day (simulating a 'Basket').
-    """
-    conn = get_db_connection()
+def extract_recommendations_from_baskets(baskets, target_item_name, conn, limit=5):
+    if len(baskets) < 2:
+        return []
+
+    # Adjust min_support based on typical sparse grocery data
+    # For personal data, we might need lower min_support because there are fewer baskets
+    itemsets, rules = apriori(baskets, min_support=0.01, min_confidence=0.1)
+
+    target_lower = target_item_name.lower()
+    matched_rules = []
+
+    for rule in rules:
+        lhs_lower = [item.lower() for item in rule.lhs]
+        if target_lower in lhs_lower:
+            matched_rules.append(rule)
+
+    matched_rules = sorted(matched_rules, key=lambda r: r.confidence, reverse=True)
+    
     recommendations = []
+    seen = set()
+    for rule in matched_rules:
+        for rhs_item in rule.rhs:
+            if rhs_item.lower() not in seen:
+                seen.add(rhs_item.lower())
+                
+                cat_info = conn.execute("SELECT category, consumption_unit FROM product_catalog WHERE item_name = ? COLLATE NOCASE", (rhs_item,)).fetchone()
+                cat = cat_info['category'] if cat_info else "Other"
+                unit = cat_info['consumption_unit'] if cat_info else "kg"
 
-    try:
-        # --- FIX: Added 'consumption_logs.' before user_id to resolve ambiguity ---
-        query = """
-            SELECT consumption_logs.user_id, date(consumption_date) as date, products.item_name 
-            FROM consumption_logs 
-            JOIN products ON consumption_logs.product_id = products.product_id
-        """
-        df = pd.read_sql(query, conn)
-        
-        if df.empty: return []
-
-        # 2. Group items into baskets
-        # Result: [{'Bread', 'Eggs', 'Milk'}, {'Sugar', 'Tea'}, ...]
-        baskets = df.groupby(['user_id', 'date'])['item_name'].apply(set).tolist()
-
-        # 3. Find baskets that contain our Target Item
-        # We search case-insensitively just to be safe
-        relevant_baskets = [b for b in baskets if any(target_item_name.lower() in i.lower() for i in b)]
-        
-        if not relevant_baskets:
-            return []
-
-        # 4. Count co-occurring items
-        co_occurrences = Counter()
-        
-        for basket in relevant_baskets:
-            for item in basket:
-                # Don't recommend the target item itself
-                if item.lower() != target_item_name.lower():
-                    co_occurrences[item] += 1
-
-        # 5. Calculate "Confidence" (Probability)
-        total_appearances = len(relevant_baskets)
-        
-        # Get top N results
-        for item, count in co_occurrences.most_common(limit):
-            confidence = (count / total_appearances) * 100
-            
-            # Only recommend if confidence is significant (> 10%)
-            if confidence > 10:
                 recommendations.append({
-                    "item": item,
-                    "confidence": round(confidence, 1),
-                    "reason": f"Bought together in {count} transactions"
+                    "item_name": rhs_item,
+                    "category": cat,
+                    "consumption_unit": unit,
+                    "confidence": round(rule.confidence * 100, 1),
+                    "reason": f"Bought together (Lift: {round(rule.lift, 2)})"
                 })
-
-    except Exception as e:
-        print(f"Market Basket Error: {e}")
-    finally:
-        conn.close()
-
+                
+                if len(recommendations) >= limit:
+                    break
+        if len(recommendations) >= limit:
+            break
+            
     return recommendations
+
+def get_market_basket_recommendations(target_item_name, user_id=None, limit=5):
     """
     Analyzes consumption history to find items frequently consumed together 
-    on the same day (simulating a 'Basket').
+    using efficient-apriori Association Rule Mining on manual_consumption_logs.
+    First tries personalized patterns, then falls back to global.
     """
     conn = get_db_connection()
     recommendations = []
 
     try:
-        # 1. Get all consumption logs
-        # We group by User and Date to define a "Basket" (things consumed together)
-        query = """
-            SELECT user_id, date(consumption_date) as date, item_name 
-            FROM consumption_logs 
-            JOIN products ON consumption_logs.product_id = products.product_id
-        """
-        df = pd.read_sql(query, conn)
-        
-        if df.empty: return []
-
-        # 2. Group items into baskets
-        # Result: [{'Bread', 'Eggs', 'Milk'}, {'Sugar', 'Tea'}, ...]
-        baskets = df.groupby(['user_id', 'date'])['item_name'].apply(set).tolist()
-
-        # 3. Find baskets that contain our Target Item
-        relevant_baskets = [b for b in baskets if target_item_name in b]
-        
-        if not relevant_baskets:
-            return []
-
-        # 4. Count co-occurring items
-        # If basket is {'Bread', 'Eggs'} and target is 'Bread', we count 'Eggs'.
-        co_occurrences = Counter()
-        
-        for basket in relevant_baskets:
-            for item in basket:
-                if item != target_item_name: # Don't recommend the item itself
-                    co_occurrences[item] += 1
-
-        # 5. Calculate "Confidence" (Probability)
-        # Confidence = (Times A and B together) / (Times A appeared)
-        total_appearances = len(relevant_baskets)
-        
-        # Get top N results
-        for item, count in co_occurrences.most_common(limit):
-            confidence = (count / total_appearances) * 100
+        if user_id:
+            # Try personalized baskets first
+            query_personal = """
+                SELECT manual_consumption_logs.user_id, date(consumption_date) as date, products.item_name 
+                FROM manual_consumption_logs 
+                JOIN products ON manual_consumption_logs.product_id = products.product_id
+                WHERE manual_consumption_logs.user_id = ?
+            """
+            df_personal = pd.read_sql(query_personal, conn, params=(user_id,))
             
-            # Only recommend if confidence is significant (> 20%)
-            if confidence > 20:
-                recommendations.append({
-                    "item": item,
-                    "confidence": round(confidence, 1),
-                    "reason": f"Bought together in {count} transactions"
-                })
+            if not df_personal.empty:
+                baskets_personal = df_personal.groupby(['user_id', 'date'])['item_name'].apply(tuple).tolist()
+                recommendations = extract_recommendations_from_baskets(baskets_personal, target_item_name, conn, limit)
+        
+        # Fall back to global baskets if no personal recommendations
+        if not recommendations:
+            query_global = """
+                SELECT consumption_logs.user_id, date(consumption_date) as date, products.item_name 
+                FROM consumption_logs 
+                JOIN products ON consumption_logs.product_id = products.product_id
+            """
+            df_global = pd.read_sql(query_global, conn)
+            
+            if not df_global.empty:
+                baskets_global = df_global.groupby(['user_id', 'date'])['item_name'].apply(tuple).tolist()
+                recommendations = extract_recommendations_from_baskets(baskets_global, target_item_name, conn, limit)
+                # Indicate these are global patterns
+                for rec in recommendations:
+                    rec["reason"] += " [Global Pattern]"
 
     except Exception as e:
         print(f"Market Basket Error: {e}")

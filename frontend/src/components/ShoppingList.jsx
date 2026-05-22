@@ -559,6 +559,7 @@ const ShoppingList = () => {
             <div className="mb-6">
               <SmartSuggestions
                 triggerItem={lastAddedItem}
+                userId={userId}
                 onAdd={handleAddSuggestion}
               />
             </div>

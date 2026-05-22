@@ -27,25 +27,22 @@ def get_alfatah_price(item_name):
     # Clean name (remove brackets like '(500g)')
     search_term = item_name.split("(")[0].strip()
 
-    params = {
-        "q": search_term,
-        "resources[type]": "product",
-        "resources[limit]": 1
-    }
+    import subprocess
+    import json
+    import urllib.parse
+    
+    url = f"https://alfatah.pk/search/suggest.json?q={urllib.parse.quote(search_term)}&resources%5Btype%5D=product&resources%5Blimit%5D=1"
 
     try:
-        response = requests.get(
-            SEARCH_API,
-            params=params,
-            headers=HEADERS,
-            timeout=10
-        )
-
-        if response.status_code != 200:
+        result = subprocess.run([
+            "curl", "-s", "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", url
+        ], capture_output=True, text=True, timeout=10)
+        
+        if result.returncode != 0:
             return None
-
-        data = response.json()
-        products = (data.get("resources", {}).get("results", {}).get("products", []))
+            
+        data = json.loads(result.stdout)
+        products = data.get("resources", {}).get("results", {}).get("products", [])
 
         if not products:
             return None
@@ -55,10 +52,7 @@ def get_alfatah_price(item_name):
         if price_raw is None:
             return None
 
-        # --- FIX: REMOVED THE '/ 100' DIVISION ---
-        # Al-Fatah returns "170.00" for Rs 170, not "17000" cents.
         price = float(price_raw) 
-
         return price
 
     except Exception as e:

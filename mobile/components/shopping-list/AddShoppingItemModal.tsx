@@ -60,15 +60,35 @@ export default function AddShoppingItemModal({
             returnKeyType="done"
             onSubmitEditing={() => Keyboard.dismiss()}
           />
-          <TextInput
-            value={unit}
-            onChangeText={onUnitChange}
-            placeholder="Unit"
-            placeholderTextColor={colors.text3}
-            style={[styles.input, { color: colors.text1, borderColor: colors.border, backgroundColor: colors.bg }]}
-            returnKeyType="done"
-            onSubmitEditing={() => Keyboard.dismiss()}
-          />
+          <Text style={[styles.label, { color: colors.text2, marginTop: 4 }]}>Unit</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipRow}
+          >
+            {['kg', 'g', 'L', 'ml', 'unit', 'pkt', 'dozen'].map((u) => (
+              <Pressable
+                key={u}
+                style={[
+                  styles.categoryChip,
+                  { borderColor: colors.border, backgroundColor: colors.surface2 },
+                  unit === u && { backgroundColor: colors.accent1, borderColor: colors.accent1 },
+                ]}
+                onPress={() => onUnitChange(u)}
+              >
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    { color: colors.text1 },
+                    unit === u && { color: colors.bg },
+                  ]}
+                >
+                  {u}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          <Text style={[styles.label, { color: colors.text2, marginTop: 8 }]}>Category</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -135,6 +155,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 14,
     fontSize: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 4,
   },
   chipRow: {
     gap: 8,

@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from flask import Blueprint, request, jsonify 
 from datetime import datetime, timedelta
 from database import get_db_connection
@@ -271,6 +272,7 @@ def confirm_list(list_id):
 @shopping_bp.route('/shopping/suggest', methods=['GET'])
 def suggest_items():
     item_name = request.args.get('item')
+    user_id = request.args.get('userId')
     if not item_name: return jsonify([])
-    suggestions = get_market_basket_recommendations(item_name)
+    suggestions = get_market_basket_recommendations(item_name, user_id)
     return jsonify(suggestions)

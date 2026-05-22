@@ -1,8 +1,9 @@
+# pyrefly: ignore [missing-import]
 from flask import Blueprint, request, jsonify
 from database import get_db_connection
 from services.analytics import get_consumption_forecast, detect_anomaly
 from services.scraper import update_market_prices, preview_market_prices, save_market_prices
-from services.analytics import get_ai_learning_status # <--- Import the new function
+from services.analytics import get_ai_learning_status
 
 analytics_bp = Blueprint('analytics', __name__)
 
@@ -162,18 +163,34 @@ def get_analytics():
         
         seasonal_trends = [{"name": k, "value": v} for k, v in seasons.items() if v > 0]
 
-        # 2. TOP ITEMS (Pareto)
-        top_query = """
+        # 2. TOP ITEMS (Pareto) - All Time, Yearly, Monthly
+        top_query_base = """
             SELECT p.item_name, COUNT(cl.log_id) as freq
             FROM consumption_logs cl
             JOIN products p ON cl.product_id = p.product_id
-            WHERE cl.user_id = ?
+            WHERE cl.user_id = ? {time_filter}
             GROUP BY p.item_name
             ORDER BY freq DESC
             LIMIT 5
         """
-        top_rows = conn.execute(top_query, (user_id,)).fetchall()
-        top_items = [{"name": row['item_name'], "count": row['freq']} for row in top_rows]
+        
+        # All Time
+        top_rows_all = conn.execute(top_query_base.format(time_filter=""), (user_id,)).fetchall()
+        top_items_all = [{"name": row['item_name'], "count": row['freq']} for row in top_rows_all]
+        
+        # Yearly
+        top_rows_yearly = conn.execute(top_query_base.format(time_filter="AND strftime('%Y', cl.consumption_date) = strftime('%Y', 'now')"), (user_id,)).fetchall()
+        top_items_yearly = [{"name": row['item_name'], "count": row['freq']} for row in top_rows_yearly]
+        
+        # Monthly
+        top_rows_monthly = conn.execute(top_query_base.format(time_filter="AND strftime('%Y-%m', cl.consumption_date) = strftime('%Y-%m', 'now')"), (user_id,)).fetchall()
+        top_items_monthly = [{"name": row['item_name'], "count": row['freq']} for row in top_rows_monthly]
+
+        top_items = {
+            "all_time": top_items_all,
+            "yearly": top_items_yearly,
+            "monthly": top_items_monthly
+        }
 
         # 3. DIETARY COMPOSITION (Radar)
         inventory = conn.execute("SELECT category, current_quantity FROM products WHERE user_id = ?", (user_id,)).fetchall()
@@ -200,8 +217,8 @@ def get_analytics():
             top_season = max(seasonal_trends, key=lambda x: x['value'])
             insights.append(f"📅 Seasonal Analysis: Your peak consumption is in {top_season['name']}.")
         
-        if top_items:
-            most_used = top_items[0]['name']
+        if top_items['all_time']:
+            most_used = top_items['all_time'][0]['name']
             insights.append(f"🔥 Most consumed item: '{most_used}'. Recommendation: Buy in bulk.")
         
         total_stock = sum(macros.values())
@@ -228,8 +245,6 @@ def get_analytics():
 # ---------------------------------------------------------
 # ROUTE 3: PREDICTIVE FORECAST (ARIMA/WMA)
 # ---------------------------------------------------------
-# In backend/routes/analytics.py
-
 @analytics_bp.route('/analytics/forecast/<int:product_id>', methods=['GET'])
 def product_forecast(product_id):
     conn = get_db_connection()
@@ -291,20 +306,13 @@ def product_forecast(product_id):
         return jsonify({"success": False, "message": str(e)}), 500
     finally:
         conn.close()
-# In backend/routes/analytics.py
 
 @analytics_bp.route('/analytics/fetch-live-prices', methods=['POST'])
 def fetch_live_prices():
     try:
-        # 1. Get User ID from the request
-        # The frontend uses POST, but doesn't send a body yet. 
-        # We can grab it from query params OR defaults.
-        # Ideally, update frontend to send JSON body: { userId: 123 }
-        
         data = request.get_json() or {}
         user_id = data.get('userId') 
         
-        # 2. Call scraper with specific User ID
         count = update_market_prices(user_id=user_id)
         
         return jsonify({
@@ -352,8 +360,6 @@ def save_live_prices():
     except Exception as e:
         print(f"Save Scraper Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
-
-
 
 @analytics_bp.route('/analytics/status', methods=['GET'])
 def ai_status():

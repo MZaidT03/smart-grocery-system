@@ -55,7 +55,11 @@ type AnalyticsData = {
   success: boolean;
   consumption_trend: ConsumptionTrend[];
   seasonal_trends: SeasonalTrend[];
-  top_items: TopItem[];
+  top_items: {
+    all_time: TopItem[];
+    monthly: TopItem[];
+    yearly: TopItem[];
+  };
   dietaryComposition: DietaryData[];
   insights: string[];
 };
@@ -72,6 +76,7 @@ export default function AnalyticsScreen() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [topItemsFilter, setTopItemsFilter] = useState<"monthly" | "yearly" | "all_time">("monthly");
 
   const fetchAnalytics = useCallback(
     async (isRefresh = false) => {
@@ -109,7 +114,7 @@ export default function AnalyticsScreen() {
     const peakMonth = [...(data?.consumption_trend ?? [])].sort(
       (a, b) => b.items - a.items,
     )[0];
-    const topItem = data?.top_items?.[0];
+    const topItem = data?.top_items?.all_time?.[0];
     const peakSeason = [...(data?.seasonal_trends ?? [])].sort(
       (a, b) => b.value - a.value,
     )[0];
@@ -129,7 +134,7 @@ export default function AnalyticsScreen() {
   const hasAnalytics =
     !!data &&
     (data.consumption_trend.length > 0 ||
-      data.top_items.length > 0 ||
+      (data.top_items?.all_time?.length ?? 0) > 0 ||
       data.seasonal_trends.length > 0 ||
       data.dietaryComposition.length > 0 ||
       data.insights.length > 0);
@@ -328,11 +333,11 @@ export default function AnalyticsScreen() {
                 </View>
               )}
 
-              {!!data?.top_items?.length && (
+              {!!data?.top_items && (
                 <View style={styles.sectionCard}>
                   <View style={styles.sectionHeader}>
                     <ListOrdered size={18} color={colors.accent1} />
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text style={styles.sectionTitle}>
                         Most consumed items
                       </Text>
@@ -342,15 +347,39 @@ export default function AnalyticsScreen() {
                     </View>
                   </View>
 
-                  <BarChart
-                    data={data.top_items.map((item, index) => ({
-                      label: `${index + 1}. ${item.name}`,
-                      value: item.count,
-                      suffix: "x",
-                    }))}
-                    fillStyle={styles.barFillBlue}
-                    styles={styles}
-                  />
+                  <View style={styles.filterRow}>
+                    {(["monthly", "yearly", "all_time"] as const).map((filter) => (
+                      <Pressable
+                        key={filter}
+                        style={[
+                          styles.filterButton,
+                          topItemsFilter === filter && styles.filterButtonActive
+                        ]}
+                        onPress={() => setTopItemsFilter(filter)}
+                      >
+                        <Text style={[
+                          styles.filterButtonText,
+                          topItemsFilter === filter && styles.filterButtonTextActive
+                        ]}>
+                          {filter === "all_time" ? "All Time" : filter.charAt(0).toUpperCase() + filter.slice(1)}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  {data.top_items[topItemsFilter]?.length ? (
+                    <BarChart
+                      data={data.top_items[topItemsFilter].map((item, index) => ({
+                        label: `${index + 1}. ${item.name}`,
+                        value: item.count,
+                        suffix: "x",
+                      }))}
+                      fillStyle={styles.barFillBlue}
+                      styles={styles}
+                    />
+                  ) : (
+                    <Text style={styles.emptyFilterText}>No data for this period.</Text>
+                  )}
                 </View>
               )}
 
@@ -838,6 +867,42 @@ const createStyles = (colors: any) => {
       fontSize: 12,
       fontWeight: "700",
       marginTop: 2,
+    },
+    filterRow: {
+      flexDirection: "row",
+      backgroundColor: colors.surface2 || colors.bg,
+      borderRadius: 12,
+      padding: 4,
+      marginBottom: 4,
+    },
+    filterButton: {
+      flex: 1,
+      paddingVertical: 8,
+      alignItems: "center",
+      borderRadius: 10,
+    },
+    filterButtonActive: {
+      backgroundColor: colors.surface1,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 2,
+    },
+    filterButtonText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: colors.text3,
+    },
+    filterButtonTextActive: {
+      color: colors.text1,
+      fontWeight: "900",
+    },
+    emptyFilterText: {
+      color: colors.text3,
+      fontSize: 13,
+      textAlign: "center",
+      paddingVertical: 12,
     },
     columnChartContainer: {
       flexDirection: "row",

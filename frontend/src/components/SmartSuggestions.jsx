@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Sparkles, Plus, Loader2 } from "lucide-react";
 
-const SmartSuggestions = ({ triggerItem, onAdd }) => {
+const SmartSuggestions = ({ triggerItem, userId, onAdd }) => {
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -13,7 +13,7 @@ const SmartSuggestions = ({ triggerItem, onAdd }) => {
       try {
         // Call your new Market Basket Analysis Endpoint
         const res = await fetch(
-          `http://127.0.0.1:5000/shopping/suggest?item=${triggerItem}`
+          `http://127.0.0.1:5000/shopping/suggest?item=${triggerItem}&userId=${userId}`
         );
         const data = await res.json();
         setSuggestions(data);
@@ -55,7 +55,7 @@ const SmartSuggestions = ({ triggerItem, onAdd }) => {
             >
               <div>
                 <div className="text-sm font-medium text-zinc-200">
-                  {s.item}
+                  {s.item_name}
                 </div>
                 <div className="text-[10px] text-zinc-500">
                   {s.confidence}% match • {s.reason}
@@ -63,7 +63,7 @@ const SmartSuggestions = ({ triggerItem, onAdd }) => {
               </div>
 
               <button
-                onClick={() => onAdd(s.item)}
+                onClick={() => onAdd(s.item_name)}
                 className="p-1.5 bg-zinc-800 hover:bg-purple-600 text-zinc-400 hover:text-white rounded-md transition"
                 title="Add to List"
               >

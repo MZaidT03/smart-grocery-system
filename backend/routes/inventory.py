@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
 from database import get_db_connection
@@ -356,6 +357,7 @@ def consume():
         sync_product_total(conn, pid)
         conn.execute("UPDATE products SET updated_at = CURRENT_TIMESTAMP WHERE product_id = ?", (pid,))
         conn.execute("INSERT INTO consumption_logs (product_id, user_id, consumed_quantity, consumption_date) VALUES (?, ?, ?, date('now'))", (pid, user_id, actual_consumed))
+        conn.execute("INSERT INTO manual_consumption_logs (product_id, user_id, consumed_quantity, consumption_date) VALUES (?, ?, ?, date('now'))", (pid, user_id, actual_consumed))
         conn.execute("""
             INSERT INTO consumption_summary (product_id, user_id, summary_date, total_consumed)
             VALUES (?, ?, date('now'), ?)

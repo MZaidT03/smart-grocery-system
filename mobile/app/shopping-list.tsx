@@ -104,6 +104,7 @@ export default function ShoppingListScreen() {
 
   const [suggestions, setSuggestions] = useState<QuickSuggestion[]>([]);
   const [suggestionQuery, setSuggestionQuery] = useState("");
+  const [lastAddedItem, setLastAddedItem] = useState<string | null>(null);
 
   const listId = list?.list_id;
   const checkedCount = items.filter((item) => item.is_selected !== 0).length;
@@ -151,14 +152,16 @@ export default function ShoppingListScreen() {
   }, [userId, params.listId]);
 
   useEffect(() => {
-    if (!suggestionQuery.trim()) {
+    if (!suggestionQuery.trim() && !lastAddedItem) {
       setSuggestions([]);
       return;
     }
 
+    const itemToQuery = suggestionQuery.trim() || lastAddedItem || "";
+
     const timeout = setTimeout(async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/shopping/suggest?item=${encodeURIComponent(suggestionQuery)}`);
+        const res = await fetch(`${API_BASE_URL}/shopping/suggest?item=${encodeURIComponent(itemToQuery)}&userId=${userId}`);
         const data = await res.json();
         setSuggestions(Array.isArray(data) ? data.slice(0, 5) : []);
       } catch (err) {
@@ -167,7 +170,7 @@ export default function ShoppingListScreen() {
     }, 250);
 
     return () => clearTimeout(timeout);
-  }, [suggestionQuery]);
+  }, [suggestionQuery, lastAddedItem, userId]);
 
   const handleGenerateList = async () => {
     if (!userId || generating) return;
@@ -226,6 +229,7 @@ export default function ShoppingListScreen() {
       setNewItemUnit("kg");
       setNewItemCategory("Staples");
       setShowAddModal(false);
+      setLastAddedItem(newItemName.trim());
       await fetchList(listId, true);
     } catch (err) {
       Alert.alert("Add failed", "Server error. Try again.");
@@ -249,7 +253,9 @@ export default function ShoppingListScreen() {
       const data = await res.json();
       if (data?.success) {
         setSuggestionQuery("");
-        setSuggestions([]);
+        setLastAddedItem(suggestion.item_name);
+        await fetchList(listId, true);
+      } else {
         await fetchList(listId, true);
       }
     } catch (err) {
@@ -496,7 +502,7 @@ export default function ShoppingListScreen() {
             </View>
           ) : (
             <>
-              /* Active List Stats */
+              {/* Active List Stats */}
               <View style={styles.statsRow}>
                 <View style={styles.statBox}>
                   <Text style={styles.statLabel}>Total Items</Text>
@@ -512,7 +518,7 @@ export default function ShoppingListScreen() {
                 </View>
               </View>
 
-              /* Smart Add Section */
+              {/* Smart Add Section */}
               <View style={styles.sectionCard}>
                 <View style={styles.addHeaderRow}>
                   <Text style={styles.sectionTitle}>Add Items</Text>
@@ -535,11 +541,18 @@ export default function ShoppingListScreen() {
 
                 {suggestions.length > 0 && (
                   <View style={styles.suggestionList}>
+                    {!suggestionQuery.trim() && lastAddedItem && (
+                      <Text style={[styles.sectionTitle, { fontSize: 13, color: colors.accent1, marginBottom: 8 }]}>
+                        Because you bought {lastAddedItem}
+                      </Text>
+                    )}
                     {suggestions.map((item) => (
                       <View key={item.item_name} style={styles.suggestionRow}>
                         <View style={styles.suggestionInfo}>
                           <Text style={styles.suggestionTitle}>{item.item_name}</Text>
-                          <Text style={styles.suggestionMeta}>{item.category || "Other"}</Text>
+                          <Text style={styles.suggestionMeta}>
+                            {item.confidence ? `${item.confidence}% match • ${item.reason}` : (item.category || "Other")}
+                          </Text>
                         </View>
                         <Pressable style={styles.suggestionAddBtn} onPress={() => handleSuggestAdd(item)}>
                           <Plus size={16} color={colors.accent1} />
@@ -550,7 +563,7 @@ export default function ShoppingListScreen() {
                 )}
               </View>
 
-              /* List Items */
+              {/* List Items */}
               <View style={styles.listCard}>
                 <View style={styles.listHeaderRow}>
                   <Text style={styles.sectionTitle}>Your Items</Text>
