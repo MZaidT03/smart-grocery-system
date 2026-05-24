@@ -22,6 +22,7 @@ import {
   ShoppingBasket,
   SlidersHorizontal,
   X,
+  Camera,
 } from "lucide-react-native";
 
 type Product = {
@@ -117,9 +118,8 @@ export default function ProductsScreen() {
       })
       .filter((product) => {
         if (!normalizedQuery) return true;
-        const searchable = `${product.name} ${product.category ?? ""} ${
-          product.unit
-        }`.toLowerCase();
+        const searchable = `${product.name} ${product.category ?? ""} ${product.unit
+          }`.toLowerCase();
         return searchable.includes(normalizedQuery);
       })
       .sort((a, b) => urgencyScore(a) - urgencyScore(b));

@@ -7,11 +7,20 @@ import sqlite3
 # We need to import the database connection helper to use it in this file
 from database import get_db_connection 
 
+import logging
+try:
+    from prophet import Prophet
+    # Mute Prophet's annoying logs
+    logging.getLogger("prophet").setLevel(logging.ERROR)
+    logging.getLogger("cmdstanpy").disabled = True
+except ImportError:
+    Prophet = None
+
 def get_consumption_forecast(consumption_logs):
     """
     Returns TWO forecasts:
     1. Robust Trend (WMA) - Safe, flat line.
-    2. Seasonal (Holt-Winters Lite) - Wavy line detecting weekly patterns.
+    2. Seasonal (Facebook Prophet) - Detects weekly patterns, falls back to WMA if not enough data.
     """
     # 0. Handle Empty Data
     if not consumption_logs or len(consumption_logs) < 5:
@@ -27,51 +36,61 @@ def get_consumption_forecast(consumption_logs):
         
         # Reindex to ensure every day is present (fill missing with 0)
         full_idx = pd.date_range(start=daily_series.index.min(), end=daily_series.index.max(), freq='D')
-        daily_series = daily_series.reindex(full_idx, fill_value=0)
-        
-        values = daily_series.values
+        daily_series = daily_series.reindex(full_idx, fill_value=0).reset_index()
+        daily_series.columns = ['ds', 'y']
         
         # --- MODEL 1: Weighted Moving Average (The "Safe" Trend) ---
-        recent_window = daily_series.tail(30)
-        if len(recent_window) == 0: return None
-
+        recent_window = daily_series.tail(30)['y']
+        values = daily_series['y'].values
+        
         weights = np.arange(1, len(recent_window) + 1)
-        wma_val = np.average(recent_window, weights=weights)
+        wma_val = np.average(recent_window, weights=weights) if len(recent_window) > 0 else 0
 
         # --- MODEL 2: Simplified Seasonal Forecast (Holt-Winters Lite) ---
-        # We need at least 14 days (2 weeks) to detect a "weekly" pattern
-        seasonal_forecast = []
-        
+        holt_winters_forecast = []
         if len(values) >= 14:
-            season_len = 7 # Weekly pattern
-            
-            # Calculate "Average Day of Week" indices
+            season_len = 7
             seasonal_indices = []
-            mean_val = np.mean(values) + 1e-6 # Avoid div by zero
-            
+            mean_val = np.mean(values) + 1e-6
             for i in range(season_len):
-                # Get all Mondays, all Tuesdays, etc.
                 day_vals = values[i::season_len]
-                # Compare day average to global average
                 idx = np.mean(day_vals) / mean_val
                 seasonal_indices.append(idx)
             
-            # Project forward 7 days
             current_day_idx = len(values) % season_len
-            
             for i in range(7):
                 season_idx = (current_day_idx + i) % season_len
-                # Apply seasonality to the WMA trend
                 val = wma_val * seasonal_indices[season_idx]
-                seasonal_forecast.append(round(val, 2))
+                holt_winters_forecast.append(round(val, 2))
         else:
-            # Not enough data for seasonality, fallback to flat WMA
-            seasonal_forecast = [round(wma_val, 2)] * 7
+            holt_winters_forecast = [round(max(0, wma_val), 2)] * 7
+
+        # --- MODEL 3: Advanced Seasonal Forecast (Facebook Prophet) ---
+        prophet_forecast = []
+        method = "Weighted Moving Average (Fallback)"
+
+        if Prophet is not None and len(daily_series) >= 14:
+            try:
+                m = Prophet(yearly_seasonality=False, daily_seasonality=False, weekly_seasonality=True)
+                m.fit(daily_series)
+                
+                future = m.make_future_dataframe(periods=7)
+                forecast = m.predict(future)
+                
+                prophet_preds = forecast['yhat'].tail(7).values
+                prophet_forecast = [round(max(0, val), 2) for val in prophet_preds]
+                method = "Facebook Prophet (Weekly Seasonality)"
+            except Exception as e:
+                print(f"Prophet failed: {e}")
+                prophet_forecast = [round(max(0, wma_val), 2)] * 7
+        else:
+            prophet_forecast = [round(max(0, wma_val), 2)] * 7
 
         return {
             "wma_daily_usage": round(wma_val, 2),
-            "seasonal_prediction": seasonal_forecast, 
-            "method": "Hybrid (WMA + Seasonal)"
+            "seasonal_prediction": holt_winters_forecast, 
+            "prophet_prediction": prophet_forecast,
+            "method": method
         }
 
     except Exception as e:

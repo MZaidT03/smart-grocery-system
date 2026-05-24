@@ -9,6 +9,7 @@ import {
   Sun,
   User,
   Wallet,
+  Camera,
 } from "lucide-react-native";
 
 type HomeHeaderProps = {
@@ -19,6 +20,7 @@ type HomeHeaderProps = {
   budgetStatus?: string;
   onAddPress: () => void;
   onProfilePress: () => void;
+  onScanPress?: () => void;
 };
 
 export default function HomeHeader({
@@ -29,6 +31,7 @@ export default function HomeHeader({
   budgetStatus,
   onAddPress,
   onProfilePress,
+  onScanPress,
 }: HomeHeaderProps) {
   const { mode, setMode, scheme, colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -80,6 +83,11 @@ export default function HomeHeader({
         </View>
 
         <View style={styles.iconRow}>
+          {onScanPress && (
+            <Pressable style={styles.iconButton} onPress={onScanPress}>
+              <Camera size={18} color={colors.text1} />
+            </Pressable>
+          )}
           <Pressable style={styles.iconButton} onPress={onProfilePress}>
             <User size={18} color={colors.text1} />
           </Pressable>

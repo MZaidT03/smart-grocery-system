@@ -274,10 +274,12 @@ def product_forecast(product_id):
         # Default values
         wma_usage = 0
         seasonal_points = []
+        prophet_points = []
         
         if forecast:
             wma_usage = forecast['wma_daily_usage']
             seasonal_points = forecast['seasonal_prediction']
+            prophet_points = forecast['prophet_prediction']
 
         # Calc days left based on WMA (safer for run-out dates)
         days_left = 999
@@ -296,6 +298,7 @@ def product_forecast(product_id):
             "forecast": {
                 "daily_usage": wma_usage,         # Single number for flat line
                 "seasonal_points": seasonal_points, # List of 7 numbers for wavy line
+                "prophet_points": prophet_points,   # List of 7 numbers from Prophet
                 "method": forecast['method'] if forecast else "No Data"
             },
             "smart_days_left": round(days_left, 1)

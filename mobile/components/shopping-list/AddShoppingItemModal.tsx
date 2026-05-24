@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, TextInput, ScrollView, Pressable, StyleSheet, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { useTheme } from '@/context/theme';
+import { API_BASE_URL } from '@/constants/api';
 
 interface AddShoppingItemModalProps {
   visible: boolean;
@@ -32,24 +33,83 @@ export default function AddShoppingItemModal({
   categories,
 }: AddShoppingItemModalProps) {
   const { colors } = useTheme();
+  const [catalog, setCatalog] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      fetch(`${API_BASE_URL}/catalog`)
+        .then(res => res.json())
+        .then(data => setCatalog(data))
+        .catch(err => console.error("Failed to fetch catalog", err));
+    } else {
+      setShowSuggestions(false);
+      setSuggestions([]);
+    }
+  }, [visible]);
 
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.modalBackdrop}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={[styles.modalCard, { backgroundColor: colors.surface1, borderColor: colors.border }]}>
           <Text style={[styles.modalTitle, { color: colors.text1 }]}>Add item</Text>
-          <TextInput
-            value={itemName}
-            onChangeText={onItemNameChange}
-            placeholder="Item name"
-            placeholderTextColor={colors.text3}
-            style={[styles.input, { color: colors.text1, borderColor: colors.border, backgroundColor: colors.bg }]}
-            returnKeyType="done"
-            onSubmitEditing={() => Keyboard.dismiss()}
-          />
+          <View style={{ zIndex: 10 }}>
+            <TextInput
+              value={itemName}
+              onChangeText={(text) => {
+                onItemNameChange(text);
+                if (text) {
+                  const filtered = catalog.filter((item) =>
+                    item.item_name.toLowerCase().includes(text.toLowerCase())
+                  );
+                  setSuggestions(filtered.slice(0, 5));
+                  setShowSuggestions(true);
+                } else {
+                  setShowSuggestions(false);
+                }
+              }}
+              placeholder="Item name"
+              placeholderTextColor={colors.text3}
+              style={[styles.input, { color: colors.text1, borderColor: colors.border, backgroundColor: colors.bg }]}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                Keyboard.dismiss();
+                setShowSuggestions(false);
+              }}
+              onFocus={() => {
+                if (itemName && suggestions.length > 0) {
+                  setShowSuggestions(true);
+                }
+              }}
+            />
+            {showSuggestions && suggestions.length > 0 && (
+              <View style={[styles.suggestionsContainer, { backgroundColor: colors.surface2, borderColor: colors.border }]}>
+                {suggestions.map((item, index) => (
+                  <Pressable
+                    key={index}
+                    style={[
+                      styles.suggestionItem,
+                      index < suggestions.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
+                    ]}
+                    onPress={() => {
+                      onItemNameChange(item.item_name);
+                      if (item.consumption_unit) onUnitChange(item.consumption_unit);
+                      if (item.category) onCategoryChange(item.category);
+                      setShowSuggestions(false);
+                      Keyboard.dismiss();
+                    }}
+                  >
+                    <Text style={[styles.suggestionText, { color: colors.text1 }]}>{item.item_name}</Text>
+                    <Text style={[styles.suggestionCategory, { color: colors.text3 }]}>{item.category || "Other"}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
           <TextInput
             value={qty}
             onChangeText={onQtyChange}
@@ -66,7 +126,7 @@ export default function AddShoppingItemModal({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipRow}
           >
-            {['kg', 'g', 'L', 'ml', 'unit', 'pkt', 'dozen'].map((u) => (
+            {['kg', 'L', 'pcs', 'pkt'].map((u) => (
               <Pressable
                 key={u}
                 style={[
@@ -160,6 +220,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginLeft: 4,
+  },
+  suggestionsContainer: {
+    position: 'absolute',
+    top: '100%',
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    borderWidth: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    zIndex: 100,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  suggestionItem: {
+    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  suggestionText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  suggestionCategory: {
+    fontSize: 12,
   },
   chipRow: {
     gap: 8,

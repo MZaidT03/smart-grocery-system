@@ -83,9 +83,9 @@ def get_market_basket_recommendations(target_item_name, user_id=None, limit=5):
         # Fall back to global baskets if no personal recommendations
         if not recommendations:
             query_global = """
-                SELECT consumption_logs.user_id, date(consumption_date) as date, products.item_name 
-                FROM consumption_logs 
-                JOIN products ON consumption_logs.product_id = products.product_id
+                SELECT manual_consumption_logs.user_id, date(consumption_date) as date, products.item_name 
+                FROM manual_consumption_logs 
+                JOIN products ON manual_consumption_logs.product_id = products.product_id
             """
             df_global = pd.read_sql(query_global, conn)
             

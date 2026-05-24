@@ -7,6 +7,7 @@ import os
 from routes.auth import auth_bp
 from routes.inventory import inventory_bp
 from routes.shopping import shopping_bp
+from routes.ocr import ocr_bp
 from routes.recipes import recipes_bp
 from routes.analytics import analytics_bp
 from routes.admin import admin_bp
@@ -22,6 +23,7 @@ CORS(app, resources={r"/*": {"origins": "*"}})
 app.register_blueprint(auth_bp)
 app.register_blueprint(inventory_bp)
 app.register_blueprint(shopping_bp)
+app.register_blueprint(ocr_bp, url_prefix='/ocr')
 app.register_blueprint(recipes_bp)
 app.register_blueprint(analytics_bp)
 

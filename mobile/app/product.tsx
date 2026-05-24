@@ -11,7 +11,10 @@ import {
   Text,
   TextInput,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
+import { Picker } from "@react-native-picker/picker";
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/context/theme"; // Using your updated theme context
 
@@ -39,24 +42,30 @@ export default function ProductScreen() {
   const [restockQty, setRestockQty] = useState("");
   const [restockPrice, setRestockPrice] = useState("");
   const [restockExpiryDays, setRestockExpiryDays] = useState("");
+  
+  const [showEdit, setShowEdit] = useState(false);
+  const [editUnit, setEditUnit] = useState("");
+  const [editUsageQty, setEditUsageQty] = useState("");
+  const [editUsageDays, setEditUsageDays] = useState("");
+
+  const load = async () => {
+    if (!userId || !productId) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/products?userId=${userId}`);
+      const data = await res.json();
+      const found = Array.isArray(data)
+        ? data.find((item) => String(item.id) === String(productId))
+        : null;
+      setProduct(found || null);
+    } catch (err) {
+      setProduct(null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    if (!userId || !productId) return;
-    const load = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`${API_BASE_URL}/products?userId=${userId}`);
-        const data = await res.json();
-        const found = Array.isArray(data)
-          ? data.find((item) => String(item.id) === String(productId))
-          : null;
-        setProduct(found || null);
-      } catch (err) {
-        setProduct(null);
-      } finally {
-        setLoading(false);
-      }
-    };
     load();
   }, [userId, productId]);
 
@@ -147,6 +156,44 @@ export default function ProductScreen() {
     }
   };
 
+  const openEditModal = () => {
+    if (product) {
+      // Find matching case or fallback to the exact DB value
+      const dbUnit = product.unit || "Pcs";
+      const exactMatch = ["Pcs", "Kg", "g", "Ltr", "ml", "Pack", "Bottle", "Other"].find(
+        (u) => u.toLowerCase() === dbUnit.toLowerCase()
+      );
+      setEditUnit(exactMatch || dbUnit);
+      setEditUsageQty(product.usage_freq_qty ? String(product.usage_freq_qty) : "");
+      setEditUsageDays(product.usage_freq_days ? String(product.usage_freq_days) : "");
+      setShowEdit(true);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!product || !userId) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/products/${product.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          unit: editUnit || undefined,
+          usageQty: editUsageQty ? Number.parseFloat(editUsageQty) : undefined,
+          usageDays: editUsageDays ? Number.parseFloat(editUsageDays) : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!data?.success) {
+        Alert.alert("Update failed", data?.error || "Try again.");
+        return;
+      }
+      setShowEdit(false);
+      load(); // Reload product data to reflect changes
+    } catch (err) {
+      Alert.alert("Update failed", "Server error. Try again.");
+    }
+  };
+
   const handleDelete = () => {
     if (!product) return;
     Alert.alert("Remove item?", "This will hide the product.", [
@@ -228,6 +275,9 @@ export default function ProductScreen() {
             >
               <Text style={styles.secondaryButtonText}>Restock</Text>
             </Pressable>
+            <Pressable style={styles.secondaryButton} onPress={openEditModal}>
+              <Text style={styles.secondaryButtonText}>Edit</Text>
+            </Pressable>
             <Pressable style={styles.dangerButton} onPress={handleDelete}>
               <Text style={styles.dangerButtonText}>Delete</Text>
             </Pressable>
@@ -235,8 +285,74 @@ export default function ProductScreen() {
         </ScrollView>
       )}
 
+      <Modal visible={showEdit} transparent animationType="slide">
+        <KeyboardAvoidingView 
+          style={styles.modalBackdrop} 
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit settings</Text>
+            <Text style={styles.modalLabel}>{product?.name}</Text>
+            
+            <Text style={styles.label}>Consumption Unit</Text>
+            <View style={styles.unitChipContainer}>
+              {["Pcs", "Kg", "g", "Ltr", "ml", "Pack", "Bottle", "Other"].map((u) => {
+                const isSelected = editUnit?.toLowerCase() === u.toLowerCase();
+                return (
+                  <Pressable
+                    key={u}
+                    onPress={() => setEditUnit(u)}
+                    style={[
+                      styles.unitChip,
+                      isSelected && { backgroundColor: colors.accent1, borderColor: colors.accent1 }
+                    ]}
+                  >
+                    <Text style={[styles.unitChipText, isSelected && { color: colors.bg }]}>
+                      {u}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.label}>Usage Quantity</Text>
+            <TextInput
+              value={editUsageQty}
+              onChangeText={setEditUsageQty}
+              placeholder="e.g. 1"
+              placeholderTextColor={colors.text3}
+              keyboardType="decimal-pad"
+              style={styles.input}
+            />
+            <Text style={styles.label}>Per Days</Text>
+            <TextInput
+              value={editUsageDays}
+              onChangeText={setEditUsageDays}
+              placeholder="e.g. 7"
+              placeholderTextColor={colors.text3}
+              keyboardType="decimal-pad"
+              style={styles.input}
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={() => setShowEdit(false)}
+              >
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={styles.primaryButton} onPress={handleEdit}>
+                <Text style={styles.primaryButtonText}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <Modal visible={showConsume} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView 
+          style={styles.modalBackdrop} 
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Consume item</Text>
             <Text style={styles.modalLabel}>{product?.name}</Text>
@@ -276,11 +392,14 @@ export default function ProductScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showRestock} transparent animationType="slide">
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView 
+          style={styles.modalBackdrop} 
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+        >
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Restock item</Text>
             <Text style={styles.modalLabel}>{product?.name}</Text>
@@ -320,7 +439,7 @@ export default function ProductScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -484,13 +603,40 @@ const createStyles = (colors: any) =>
       gap: 12,
       marginTop: 8,
     },
+    label: {
+      color: colors.text2,
+      fontSize: 13,
+      fontWeight: "600",
+      marginTop: 4,
+      marginBottom: -8,
+    },
     input: {
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 14,
       paddingHorizontal: 14,
-      paddingVertical: 12, // Increased touch target size
+      paddingVertical: 12,
       backgroundColor: colors.surface1,
+      color: colors.text1,
+    },
+    unitChipContainer: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 4,
+      marginBottom: 6,
+    },
+    unitChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface2,
+    },
+    unitChipText: {
+      fontSize: 13,
+      fontWeight: "600",
       color: colors.text1,
     },
   });

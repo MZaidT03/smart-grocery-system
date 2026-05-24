@@ -29,8 +29,8 @@ const ConsumptionForecast = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // NEW: Tab State ('trend' or 'seasonal')
-  const [activeTab, setActiveTab] = useState("seasonal");
+  // NEW: Tab State ('trend', 'seasonal', or 'prophet')
+  const [activeTab, setActiveTab] = useState("prophet");
 
   const userId = localStorage.getItem("userId");
   const user = localStorage.getItem("user");
@@ -100,6 +100,7 @@ const ConsumptionForecast = () => {
     }
 
     const futurePoints = forecastObj.seasonal_points || [];
+    const prophetPoints = forecastObj.prophet_points || [];
     const flatRate = forecastObj.daily_usage;
 
     for (let i = 0; i < 7; i++) {
@@ -107,10 +108,10 @@ const ConsumptionForecast = () => {
       nextDate.setDate(lastDate.getDate() + (i + 1));
 
       // DECISION: Which value to show?
-      // If 'seasonal' tab -> use the list [3.2, 4.5, 3.2...]
-      // If 'trend' tab -> use the flat number [3.2, 3.2, 3.2...]
       let val = 0;
-      if (tab === "seasonal" && futurePoints.length > i) {
+      if (tab === "prophet" && prophetPoints.length > i) {
+        val = prophetPoints[i];
+      } else if (tab === "seasonal" && futurePoints.length > i) {
         val = futurePoints[i];
       } else {
         val = flatRate;
@@ -178,10 +179,10 @@ const ConsumptionForecast = () => {
                   <Calendar className="w-4 h-4 text-blue-400" /> Timeline
                 </h2>
 
-                <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800">
+                <div className="flex bg-zinc-950 p-1 rounded-lg border border-zinc-800 overflow-x-auto">
                   <button
                     onClick={() => setActiveTab("trend")}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap ${
                       activeTab === "trend"
                         ? "bg-zinc-800 text-white shadow"
                         : "text-zinc-500 hover:text-zinc-300"
@@ -191,13 +192,23 @@ const ConsumptionForecast = () => {
                   </button>
                   <button
                     onClick={() => setActiveTab("seasonal")}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 ${
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 whitespace-nowrap ${
                       activeTab === "seasonal"
+                        ? "bg-blue-500/20 text-blue-400 border border-blue-500/20 shadow"
+                        : "text-zinc-500 hover:text-zinc-300"
+                    }`}
+                  >
+                    <Waves className="w-3 h-3" /> Seasonal Trend
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("prophet")}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                      activeTab === "prophet"
                         ? "bg-amber-500/20 text-amber-400 border border-amber-500/20 shadow"
                         : "text-zinc-500 hover:text-zinc-300"
                     }`}
                   >
-                    <Waves className="w-3 h-3" /> Seasonal AI
+                    <Activity className="w-3 h-3" /> Prophet Trend
                   </button>
                 </div>
               </div>
@@ -265,12 +276,14 @@ const ConsumptionForecast = () => {
                     <Line
                       type="monotone"
                       dataKey="predicted"
-                      stroke={activeTab === "seasonal" ? "#F59E0B" : "#3B82F6"}
+                      stroke={activeTab === "prophet" ? "#F59E0B" : activeTab === "seasonal" ? "#3B82F6" : "#A855F7"}
                       strokeWidth={3}
-                      strokeDasharray={activeTab === "seasonal" ? "0" : "5 5"} // Solid line for seasonal, dashed for trend
+                      strokeDasharray={activeTab === "trend" ? "5 5" : "0"} 
                       dot={{ r: 4 }}
                       name={
-                        activeTab === "seasonal"
+                        activeTab === "prophet"
+                          ? "Prophet Forecast"
+                          : activeTab === "seasonal"
                           ? "Seasonal Forecast"
                           : "Average Trend"
                       }
@@ -288,8 +301,10 @@ const ConsumptionForecast = () => {
               <div className="mt-4 p-3 bg-zinc-950 rounded-xl border border-zinc-800 text-xs text-zinc-400 flex items-start gap-2">
                 <Activity className="w-4 h-4 text-zinc-500 mt-0.5" />
                 <p>
-                  {activeTab === "seasonal"
-                    ? "The Seasonal Model detects patterns (e.g., higher usage on weekends) to predict variable daily needs."
+                  {activeTab === "prophet"
+                    ? "Facebook Prophet: Advanced AI model detecting weekly/yearly seasonality and holiday effects for highly accurate predictions."
+                    : activeTab === "seasonal"
+                    ? "The Seasonal Model (Holt-Winters) detects patterns (e.g., higher usage on weekends) to predict variable daily needs."
                     : "The Average Trend Model assumes constant daily usage based on your weighted history."}
                 </p>
               </div>
@@ -352,8 +367,10 @@ const ConsumptionForecast = () => {
                     AI Insight
                   </h4>
                   <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
-                    {activeTab === "seasonal"
-                      ? "Analysis complete. Detected a recurring usage pattern (Seasonality) in your history."
+                    {activeTab === "prophet"
+                      ? "Prophet Analysis complete. Facebook Prophet has analyzed complex recurring patterns and holiday effects for maximum accuracy."
+                      : activeTab === "seasonal"
+                      ? "Seasonal Analysis complete. Detected a recurring usage pattern in your history."
                       : "Analysis complete. Your consumption is relatively stable over the last 30 days."}
                   </p>
                 </div>

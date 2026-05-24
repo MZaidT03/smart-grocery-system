@@ -289,6 +289,10 @@ export default function HomeScreen() {
               params: { userId: String(userId), name: displayName ?? "" },
             })
           }
+          onScanPress={() => router.push({
+            pathname: "/scan-receipt",
+            params: { userId: String(userId) }
+          })}
         />
 
         <QuickActions onAction={handleQuickAction} />

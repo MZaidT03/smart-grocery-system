@@ -15,10 +15,10 @@ def update_master_catalog(conn, name, category, unit):
         conn.execute("""
             INSERT INTO product_catalog (
                 item_name, category, consumption_unit, daily_consumption_per_person, 
-                diet_type, default_shelf_life, default_usage_freq_days
+                diet_type, default_freq_qty, default_freq_days
             )
-            SELECT ?, ?, ?, 0.1, 'Non-Vegan', 14, 7
-            WHERE NOT EXISTS (SELECT 1 FROM product_catalog WHERE item_name = ?)
+            SELECT ?, ?, ?, 0.1, 'Non-Vegan', 1, 7
+            WHERE NOT EXISTS (SELECT 1 FROM product_catalog WHERE item_name = ? COLLATE NOCASE)
         """, (name, category, unit, name))
     except Exception as e:
         print(f"⚠️ Catalog Auto-Update Failed: {e}")

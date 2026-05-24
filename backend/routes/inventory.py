@@ -340,6 +340,56 @@ def delete_product_by_id(pid):
     finally:
         conn.close()
 
+@inventory_bp.route('/products/<int:pid>', methods=['PUT', 'OPTIONS'])
+def update_product_by_id(pid):
+    if request.method == 'OPTIONS':
+        return jsonify({'success': True}), 200
+        
+    data = request.json
+    conn = get_db_connection()
+    try:
+        prod = conn.execute("SELECT user_id FROM products WHERE product_id = ?", (pid,)).fetchone()
+        if not prod:
+            return jsonify({"success": False, "error": "Product not found"}), 404
+            
+        update_fields = []
+        params = []
+        
+        if 'name' in data:
+            update_fields.append("item_name = ?")
+            params.append(data['name'])
+        if 'category' in data:
+            update_fields.append("category = ?")
+            params.append(data['category'])
+        if 'unit' in data:
+            update_fields.append("consumption_unit = ?")
+            params.append(data['unit'])
+        if 'usageQty' in data:
+            update_fields.append("usage_freq_qty = ?")
+            params.append(safe_float(data['usageQty'], 1))
+        if 'usageDays' in data:
+            update_fields.append("usage_freq_days = ?")
+            params.append(safe_float(data['usageDays'], 1))
+            
+        if not update_fields:
+            return jsonify({"success": True})
+            
+        params.append(pid)
+        
+        query = f"UPDATE products SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP WHERE product_id = ?"
+        conn.execute(query, tuple(params))
+        conn.commit()
+        
+        return jsonify({"success": True})
+    except Exception as e:
+        conn.rollback()
+        error_msg = str(e)
+        if "UNIQUE constraint failed" in error_msg:
+            return jsonify({"success": False, "error": "An item with this name and unit already exists in your inventory."}), 400
+        return jsonify({"success": False, "error": error_msg}), 500
+    finally:
+        conn.close()
+
 @inventory_bp.route('/consume', methods=['POST'])
 def consume():
     d = request.json
