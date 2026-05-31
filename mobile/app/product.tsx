@@ -13,10 +13,23 @@ import {
   View,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  Dimensions,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
+import { 
+  ChevronLeft, 
+  Trash2, 
+  Edit3, 
+  PlusCircle, 
+  MinusCircle,
+  Calendar,
+  Clock,
+  Banknote,
+  PackageCheck
+} from "lucide-react-native";
 import { API_BASE_URL } from "@/constants/api";
-import { useTheme } from "@/context/theme"; // Using your updated theme context
+import { useTheme } from "@/context/theme";
 
 export default function ProductScreen() {
   // Pull the pure black/white/green minimal colors directly from the context
@@ -215,13 +228,15 @@ export default function ProductScreen() {
     ]);
   };
 
+  const { width } = Dimensions.get('window');
+  const IMAGE_HEIGHT = 280;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>Back</Text>
+        <Pressable onPress={() => router.back()} style={styles.iconBackButton}>
+          <ChevronLeft size={24} color={colors.text1} />
         </Pressable>
-        <Text style={styles.title}>Product</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -235,53 +250,95 @@ export default function ProductScreen() {
           <Text style={styles.emptyBody}>Go back and try again.</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>{product.name}</Text>
-            <Text style={styles.cardSubtitle}>{product.category}</Text>
-            <View style={styles.pillRow}>
-              <View style={styles.pill}>
-                <Text style={styles.pillText}>
-                  {product.quantity} {product.unit}
-                </Text>
+        <ScrollView 
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 100, paddingTop: 10 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.mainCard}>
+              <View style={styles.cardHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>{product.name}</Text>
+                  <Text style={styles.cardSubtitle}>{product.category}</Text>
+                </View>
+                <View style={[styles.statusBadge, { backgroundColor: tone.bg }]}>
+                  <Text style={[styles.statusText, { color: tone.fg }]}>
+                    {tone.label}
+                  </Text>
+                </View>
               </View>
-              <View style={[styles.pill, { backgroundColor: tone.bg }]}>
-                <Text style={[styles.pillText, { color: tone.fg }]}>
-                  {tone.label}
-                </Text>
+
+              <View style={styles.statsRow}>
+                <View style={styles.statBox}>
+                  <View style={styles.statIconWrap}>
+                    <PackageCheck size={18} color={colors.accent1} />
+                  </View>
+                  <Text style={styles.statValue}>{product.quantity}</Text>
+                  <Text style={styles.statLabel}>{product.unit}</Text>
+                </View>
+
+                <View style={styles.statBox}>
+                  <View style={styles.statIconWrap}>
+                    <Clock size={18} color={colors.accent1} />
+                  </View>
+                  <Text style={styles.statValue}>
+                    {product.days_left === -1 ? "--" : product.days_left}
+                  </Text>
+                  <Text style={styles.statLabel}>Days left</Text>
+                </View>
+
+                <View style={styles.statBox}>
+                  <View style={styles.statIconWrap}>
+                    <Banknote size={18} color={colors.accent1} />
+                  </View>
+                  <Text style={styles.statValue}>Rs {product.price}</Text>
+                  <Text style={styles.statLabel}>Price/Unit</Text>
+                </View>
+
+                <View style={styles.statBox}>
+                  <View style={styles.statIconWrap}>
+                    <Calendar size={18} color={colors.accent1} />
+                  </View>
+                  <Text style={styles.statValue}>
+                    {product.expiry_days === 999 ? "--" : product.expiry_days}
+                  </Text>
+                  <Text style={styles.statLabel}>Exp. Days</Text>
+                </View>
               </View>
             </View>
-            <Text style={styles.metaText}>Price: Rs {product.price}</Text>
-            <Text style={styles.metaText}>
-              Days left:{" "}
-              {product.days_left === -1 ? "Unknown" : product.days_left}
-            </Text>
-            <Text style={styles.metaText}>
-              Expiry:{" "}
-              {product.expiry_days === 999 ? "Unknown" : product.expiry_days}
-            </Text>
-          </View>
 
-          <View style={styles.actionsRow}>
-            <Pressable
-              style={styles.secondaryButton}
-              onPress={() => setShowConsume(true)}
-            >
-              <Text style={styles.secondaryButtonText}>Consume</Text>
-            </Pressable>
-            <Pressable
-              style={styles.secondaryButton}
-              onPress={() => setShowRestock(true)}
-            >
-              <Text style={styles.secondaryButtonText}>Restock</Text>
-            </Pressable>
-            <Pressable style={styles.secondaryButton} onPress={openEditModal}>
-              <Text style={styles.secondaryButtonText}>Edit</Text>
-            </Pressable>
-            <Pressable style={styles.dangerButton} onPress={handleDelete}>
-              <Text style={styles.dangerButtonText}>Delete</Text>
-            </Pressable>
-          </View>
+            <View style={styles.actionsSection}>
+              <Text style={styles.sectionTitle}>Quick Actions</Text>
+              
+              <View style={styles.actionGrid}>
+                <Pressable style={styles.actionCard} onPress={() => setShowConsume(true)}>
+                  <View style={[styles.actionIconBox, { backgroundColor: colors.surface2 }]}>
+                    <MinusCircle size={22} color={colors.accent1} />
+                  </View>
+                  <Text style={styles.actionLabel}>Consume</Text>
+                </Pressable>
+
+                <Pressable style={styles.actionCard} onPress={() => setShowRestock(true)}>
+                  <View style={[styles.actionIconBox, { backgroundColor: colors.surface2 }]}>
+                    <PlusCircle size={22} color={colors.accent1} />
+                  </View>
+                  <Text style={styles.actionLabel}>Restock</Text>
+                </Pressable>
+
+                <Pressable style={styles.actionCard} onPress={openEditModal}>
+                  <View style={[styles.actionIconBox, { backgroundColor: colors.surface2 }]}>
+                    <Edit3 size={22} color={colors.text1} />
+                  </View>
+                  <Text style={styles.actionLabel}>Edit</Text>
+                </Pressable>
+
+                <Pressable style={styles.actionCard} onPress={handleDelete}>
+                  <View style={[styles.actionIconBox, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
+                    <Trash2 size={22} color={colors.danger} />
+                  </View>
+                  <Text style={[styles.actionLabel, { color: colors.danger }]}>Delete</Text>
+                </Pressable>
+              </View>
+            </View>
         </ScrollView>
       )}
 
@@ -446,96 +503,166 @@ export default function ProductScreen() {
 }
 
 // Map everything to the new dynamic colors context
-const createStyles = (colors: any) =>
-  StyleSheet.create({
+const createStyles = (colors: any) => {
+  const isDark = colors.bg === "#000000";
+  const shadowColor = isDark ? "#000000" : "#102116";
+
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.bg,
+    },
     safeArea: {
       flex: 1,
       backgroundColor: colors.bg,
     },
     headerRow: {
-      padding: 20,
+      paddingHorizontal: 20,
+      paddingTop: 10,
+      paddingBottom: 10,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
     },
-    backButton: {
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      backgroundColor: colors.surface1,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    backButtonText: {
-      color: colors.text1,
-      fontWeight: "600",
-    },
     headerSpacer: {
-      width: 50,
+      width: 44, // Matches back button width to center anything if needed
     },
-    title: {
-      fontSize: 18,
-      fontWeight: "700",
-      color: colors.text1,
-    },
-    content: {
-      paddingHorizontal: 20,
-      paddingBottom: 30,
-      gap: 16,
-    },
-    card: {
+    iconBackButton: {
+      width: 44,
+      height: 44,
+      borderRadius: 14,
       backgroundColor: colors.surface1,
-      borderRadius: 18,
-      padding: 18,
+      alignItems: "center",
+      justifyContent: "center",
       borderWidth: 1,
       borderColor: colors.border,
-      gap: 6,
+    },
+    mainCard: {
+      backgroundColor: colors.surface1,
+      borderRadius: 24,
+      paddingHorizontal: 20,
+      paddingTop: 24,
+      paddingBottom: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    cardHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: 26,
     },
     cardTitle: {
-      fontSize: 20, // Slightly bumped up to align with modern editorial sizing
+      fontSize: 28,
+      fontWeight: "900",
+      color: colors.text1,
+      letterSpacing: -0.5,
+      marginBottom: 4,
+    },
+    cardSubtitle: {
+      fontSize: 15,
+      fontWeight: "600",
+      color: colors.text3,
+      textTransform: "uppercase",
+      letterSpacing: 1,
+    },
+    statusBadge: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 999,
+    },
+    statusText: {
+      fontSize: 13,
+      fontWeight: "800",
+      textTransform: "uppercase",
+    },
+    statsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    statBox: {
+      width: "48%",
+      backgroundColor: colors.bg,
+      borderRadius: 20,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    statIconWrap: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      backgroundColor: isDark ? "rgba(74, 222, 128, 0.14)" : "#eaf7ef",
+      alignItems: "center",
+      justifyContent: "center",
+      marginBottom: 12,
+    },
+    statValue: {
+      fontSize: 18,
+      fontWeight: "900",
+      color: colors.text1,
+      marginBottom: 2,
+    },
+    statLabel: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: colors.text3,
+    },
+    actionsSection: {
+      paddingHorizontal: 24,
+      marginTop: 20,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "900",
+      color: colors.text1,
+      marginBottom: 16,
+    },
+    actionGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    actionCard: {
+      width: "48%",
+      backgroundColor: colors.surface1,
+      borderRadius: 20,
+      padding: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor: colors.border,
+      gap: 10,
+    },
+    actionIconBox: {
+      width: 48,
+      height: 48,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    actionLabel: {
+      fontSize: 14,
       fontWeight: "700",
       color: colors.text1,
     },
-    cardSubtitle: {
-      color: colors.text2,
-    },
-    pillRow: {
-      flexDirection: "row",
-      gap: 8,
-      marginTop: 10,
-    },
-    pill: {
-      backgroundColor: colors.surface2,
-      borderRadius: 999,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-    },
-    pillText: {
-      color: colors.text1,
-      fontWeight: "600",
-    },
-    metaText: {
-      color: colors.text2,
-    },
-    actionsRow: {
-      gap: 10,
-    },
     primaryButton: {
-      backgroundColor: colors.accent1, // Brand Green
+      backgroundColor: colors.accent1,
       borderRadius: 16,
-      paddingVertical: 10,
+      paddingVertical: 14,
       paddingHorizontal: 16,
       alignItems: "center",
     },
     primaryButtonText: {
-      color: colors.bg, // Automatically flips text color for contrast
-      fontSize: 14,
-      fontWeight: "600",
+      color: colors.bg,
+      fontSize: 15,
+      fontWeight: "800",
     },
     secondaryButton: {
-      backgroundColor: colors.surface1,
+      backgroundColor: colors.bg,
       borderRadius: 16,
-      paddingVertical: 10,
+      paddingVertical: 14,
       paddingHorizontal: 16,
       alignItems: "center",
       borderWidth: 1,
@@ -543,100 +670,97 @@ const createStyles = (colors: any) =>
     },
     secondaryButtonText: {
       color: colors.text1,
-      fontSize: 14,
-      fontWeight: "600",
-    },
-    dangerButton: {
-      backgroundColor: colors.surface2, // Use neutral surface with danger text for minimal feel
-      borderRadius: 16,
-      paddingVertical: 10,
-      paddingHorizontal: 16,
-      alignItems: "center",
-    },
-    dangerButtonText: {
-      color: colors.danger,
-      fontSize: 14,
-      fontWeight: "600",
+      fontSize: 15,
+      fontWeight: "800",
     },
     loadingWrap: {
       flex: 1,
       justifyContent: "center",
+      alignItems: "center",
     },
     emptyState: {
       alignItems: "center",
-      paddingTop: 60,
+      paddingTop: 80,
     },
     emptyTitle: {
-      fontSize: 18,
-      fontWeight: "600",
+      fontSize: 20,
+      fontWeight: "900",
       color: colors.text1,
     },
     emptyBody: {
       color: colors.text2,
-      marginTop: 6,
+      marginTop: 8,
+      fontSize: 15,
     },
     modalBackdrop: {
       flex: 1,
-      backgroundColor: "rgba(0,0,0,0.5)", // Darkened slightly for better pure black contrast
+      backgroundColor: "rgba(0,0,0,0.6)",
       justifyContent: "center",
       padding: 20,
     },
     modalCard: {
       backgroundColor: colors.surface1,
-      borderRadius: 18,
-      padding: 18,
+      borderRadius: 24,
+      padding: 24,
       gap: 12,
       borderWidth: 1,
       borderColor: colors.border,
     },
     modalTitle: {
-      fontSize: 16,
-      fontWeight: "700",
+      fontSize: 20,
+      fontWeight: "900",
       color: colors.text1,
     },
     modalLabel: {
       color: colors.text2,
+      fontSize: 14,
+      fontWeight: "600",
+      marginBottom: 6,
     },
     modalActions: {
       flexDirection: "row",
       justifyContent: "space-between",
       gap: 12,
-      marginTop: 8,
+      marginTop: 12,
     },
     label: {
       color: colors.text2,
       fontSize: 13,
-      fontWeight: "600",
+      fontWeight: "800",
+      textTransform: "uppercase",
       marginTop: 4,
-      marginBottom: -8,
+      marginBottom: -6,
     },
     input: {
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 14,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      backgroundColor: colors.surface1,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      backgroundColor: colors.bg,
       color: colors.text1,
+      fontSize: 16,
+      fontWeight: "600",
     },
     unitChipContainer: {
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 8,
-      marginTop: 4,
-      marginBottom: 6,
+      marginTop: 6,
+      marginBottom: 8,
     },
     unitChip: {
       paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 12,
+      paddingVertical: 10,
+      borderRadius: 14,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: colors.surface2,
+      backgroundColor: colors.bg,
     },
     unitChipText: {
-      fontSize: 13,
-      fontWeight: "600",
+      fontSize: 14,
+      fontWeight: "700",
       color: colors.text1,
     },
   });
+};

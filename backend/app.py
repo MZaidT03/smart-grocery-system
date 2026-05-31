@@ -1,3 +1,15 @@
+# pyrefly: ignore [missing-import]
+import os
+import json
+
+# Load environment variables manually
+if os.path.exists('.env'):
+    with open('.env', 'r') as f:
+        for line in f:
+            if '=' in line and not line.strip().startswith('#'):
+                k, v = line.strip().split('=', 1)
+                os.environ[k.strip()] = v.strip().strip('"').strip("'")
+
 from flask import Flask, send_from_directory
 from flask_cors import CORS
 import os
@@ -14,6 +26,7 @@ from routes.admin import admin_bp
 from routes.user import user_bp
 from routes.notifications import notifications_bp
 from routes.budget import budget_bp
+from routes.ai import ai_bp
 
 app = Flask(__name__)
 
@@ -33,6 +46,7 @@ app.register_blueprint(admin_bp, url_prefix='/admin')
 app.register_blueprint(user_bp)
 app.register_blueprint(notifications_bp)
 app.register_blueprint(budget_bp)
+app.register_blueprint(ai_bp, url_prefix='/api/ai')
 
 @app.route('/')
 def serve():

@@ -7,6 +7,7 @@ import {
   Search,
   ShoppingBasket,
   TrendingUp,
+  Sparkles,
 } from "lucide-react-native";
 
 type QuickActionKey =
@@ -14,7 +15,8 @@ type QuickActionKey =
   | "prices"
   | "shopping"
   | "forecast"
-  | "analytics";
+  | "analytics"
+  | "ai";
 
 type QuickAction = {
   key: QuickActionKey;
@@ -59,6 +61,13 @@ const actions: QuickAction[] = [
     subtitle: "Spend patterns",
     icon: BarChart3,
     accent: "#ec4899",
+  },
+  {
+    key: "ai",
+    title: "AI Assistant",
+    subtitle: "Ask anything",
+    icon: Sparkles,
+    accent: "#f43f5e",
   },
 ];
 
