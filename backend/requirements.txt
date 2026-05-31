@@ -1,1 +1,5 @@
 efficient-apriori==2.0.6
+scikit-learn
+pandas
+numpy
+scipy

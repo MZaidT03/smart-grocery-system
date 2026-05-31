@@ -1,4 +1,5 @@
 import pandas as pd
+# pyrefly: ignore [missing-import]
 import numpy as np
 from datetime import datetime, timedelta
 import sqlite3
@@ -9,6 +10,7 @@ from database import get_db_connection
 
 import logging
 try:
+    # pyrefly: ignore [missing-import]
     from prophet import Prophet
     # Mute Prophet's annoying logs
     logging.getLogger("prophet").setLevel(logging.ERROR)
@@ -41,32 +43,11 @@ def get_consumption_forecast(consumption_logs):
         
         # --- MODEL 1: Weighted Moving Average (The "Safe" Trend) ---
         recent_window = daily_series.tail(30)['y']
-        values = daily_series['y'].values
-        
         weights = np.arange(1, len(recent_window) + 1)
         wma_val = np.average(recent_window, weights=weights) if len(recent_window) > 0 else 0
 
-        # --- MODEL 2: Simplified Seasonal Forecast (Holt-Winters Lite) ---
-        holt_winters_forecast = []
-        if len(values) >= 14:
-            season_len = 7
-            seasonal_indices = []
-            mean_val = np.mean(values) + 1e-6
-            for i in range(season_len):
-                day_vals = values[i::season_len]
-                idx = np.mean(day_vals) / mean_val
-                seasonal_indices.append(idx)
-            
-            current_day_idx = len(values) % season_len
-            for i in range(7):
-                season_idx = (current_day_idx + i) % season_len
-                val = wma_val * seasonal_indices[season_idx]
-                holt_winters_forecast.append(round(val, 2))
-        else:
-            holt_winters_forecast = [round(max(0, wma_val), 2)] * 7
-
-        # --- MODEL 3: Advanced Seasonal Forecast (Facebook Prophet) ---
-        prophet_forecast = []
+        # --- MODEL 2: Advanced Seasonal Forecast (Facebook Prophet) ---
+        seasonal_forecast = []
         method = "Weighted Moving Average (Fallback)"
 
         if Prophet is not None and len(daily_series) >= 14:
@@ -74,22 +55,24 @@ def get_consumption_forecast(consumption_logs):
                 m = Prophet(yearly_seasonality=False, daily_seasonality=False, weekly_seasonality=True)
                 m.fit(daily_series)
                 
+                # Project forward 7 days
                 future = m.make_future_dataframe(periods=7)
                 forecast = m.predict(future)
                 
+                # Get the last 7 days predictions, ensuring no negative predictions
                 prophet_preds = forecast['yhat'].tail(7).values
-                prophet_forecast = [round(max(0, val), 2) for val in prophet_preds]
+                seasonal_forecast = [round(max(0, val), 2) for val in prophet_preds]
                 method = "Facebook Prophet (Weekly Seasonality)"
             except Exception as e:
                 print(f"Prophet failed: {e}")
-                prophet_forecast = [round(max(0, wma_val), 2)] * 7
+                seasonal_forecast = [round(max(0, wma_val), 2)] * 7
         else:
-            prophet_forecast = [round(max(0, wma_val), 2)] * 7
+            # Not enough data for seasonality, fallback to flat WMA
+            seasonal_forecast = [round(max(0, wma_val), 2)] * 7
 
         return {
             "wma_daily_usage": round(wma_val, 2),
-            "seasonal_prediction": holt_winters_forecast, 
-            "prophet_prediction": prophet_forecast,
+            "seasonal_prediction": seasonal_forecast, 
             "method": method
         }
 

@@ -22,6 +22,7 @@ type Recipe = {
   score: number;
   ingredients?: string[];
   missing?: string[];
+  substitutions?: Record<string, string>;
 };
 
 export default function RecipesScreen() {
@@ -295,6 +296,7 @@ export default function RecipesScreen() {
               </Text>
               {selectedRecipe?.ingredients?.map((ingredient, index) => {
                 const isMissing = selectedRecipe?.missing?.includes(ingredient);
+                const substitutedBy = selectedRecipe?.substitutions?.[ingredient];
                 return (
                   <View
                     key={`${ingredient}-${index}`}
@@ -311,10 +313,12 @@ export default function RecipesScreen() {
                         styles.ingredientBadge,
                         isMissing
                           ? styles.ingredientBadgeMissing
-                          : styles.ingredientBadgeAvailable,
+                          : substitutedBy
+                            ? styles.ingredientBadgeSubstituted
+                            : styles.ingredientBadgeAvailable,
                       ]}
                     >
-                      {isMissing ? "Missing" : "In stock"}
+                      {isMissing ? "Missing" : substitutedBy ? `Using ${substitutedBy}` : "In stock"}
                     </Text>
                   </View>
                 );
@@ -637,6 +641,10 @@ const createStyles = (colors: any) =>
     ingredientBadgeAvailable: {
       backgroundColor: colors.surface2,
       color: colors.success,
+    },
+    ingredientBadgeSubstituted: {
+      backgroundColor: colors.surface2,
+      color: colors.warning,
     },
     ingredientBadgeMissing: {
       backgroundColor: colors.surface2,
