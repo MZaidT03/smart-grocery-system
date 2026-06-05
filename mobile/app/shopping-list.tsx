@@ -16,6 +16,8 @@ import {
   Text,
   TextInput,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import {
   ArrowLeft,
@@ -197,6 +199,44 @@ export default function ShoppingListScreen() {
 
     setLoading(false);
   }, [userId, params.listId]);
+
+  useEffect(() => {
+    // Handle deep link from notification to auto generate stock
+    if (params.autoGenerate === "stock" && userId && !listId && !generating) {
+      setListMode("stock");
+      
+      const generateFromStock = async () => {
+        setGenerating(true);
+        try {
+          const res = await fetch(`${API_BASE_URL}/shopping-list/generate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId,
+              numDays: 7, // default 7 days
+              numMembers: 1,
+              dietType: "Standard",
+              useExistingStock: true, // force true
+              categories: null,
+            }),
+          });
+          const data = await res.json();
+          if (data?.success && data.listId) {
+            router.setParams({ autoGenerate: undefined }); // clear param so it doesn't refire
+            await fetchList(Number(data.listId));
+          } else {
+            Alert.alert("Auto-generate failed", data?.message || "Try again.");
+          }
+        } catch {
+          Alert.alert("Auto-generate failed", "Server error.");
+        } finally {
+          setGenerating(false);
+        }
+      };
+
+      generateFromStock();
+    }
+  }, [params.autoGenerate, userId, listId]);
 
   useEffect(() => {
     if (!suggestionQuery.trim() && !lastAddedItem) {
@@ -603,10 +643,13 @@ export default function ShoppingListScreen() {
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={colors.accent1} />
-          <Text style={styles.loadingText}>Loading shopping list</Text>
+          <Text style={styles.loadingText}>Loading your list...</Text>
         </View>
       ) : (
-        <>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
           <ScrollView
             contentContainerStyle={[
               styles.content,
@@ -1092,7 +1135,7 @@ export default function ShoppingListScreen() {
               </Pressable>
             </View>
           )}
-        </>
+        </KeyboardAvoidingView>
       )}
 
       <AddShoppingItemModal

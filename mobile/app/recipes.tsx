@@ -10,6 +10,8 @@ import {
   Text,
   TextInput,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/context/theme"; 
@@ -106,6 +108,7 @@ export default function RecipesScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <View style={styles.headerRow}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backButtonText}>Back</Text>
@@ -327,6 +330,7 @@ export default function RecipesScreen() {
           </View>
         </View>
       </Modal>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

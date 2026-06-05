@@ -30,7 +30,11 @@ import {
   Moon,
   Monitor,
   Bell,
+  Sparkles
 } from "lucide-react-native";
+
+import * as Notifications from "expo-notifications";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { API_BASE_URL } from "@/constants/api";
 import AddProductModal from "@/components/home/AddProductModal";
@@ -66,8 +70,8 @@ type QuickActionKey =
   | "recipes"
   | "prices"
   | "shopping"
-  | "forecast"
   | "analytics"
+  | "smart"
   | "ai";
 
 const actions: {
@@ -105,6 +109,12 @@ const actions: {
       title: "Analytics",
       subtitle: "View spending patterns",
       icon: BarChart3,
+    },
+    {
+      key: "smart",
+      title: "Smart shopping",
+      subtitle: "Personalized recommendation",
+      icon: Sparkles,
     },
     {
       key: "ai",
@@ -169,7 +179,29 @@ export default function HomeScreen() {
     try {
       const res = await fetch(`${API_BASE_URL}/products?userId=${userId}`);
       const data = await res.json();
-      setProducts(Array.isArray(data) ? data : []);
+      const loadedProducts = Array.isArray(data) ? data : [];
+      setProducts(loadedProducts);
+
+      // --- CHECK FOR FINISHED ITEMS ---
+      const finishedItems = loadedProducts.filter((p: Product) => p.quantity <= 0);
+      if (finishedItems.length > 0) {
+        const lastNotifKey = `last_finished_notif_${userId}`;
+        const lastTime = await AsyncStorage.getItem(lastNotifKey);
+        const now = Date.now();
+        // Prevent spam: only trigger once every 6 hours
+        if (!lastTime || now - parseInt(lastTime) > 6 * 60 * 60 * 1000) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "Items Finished! 🚨",
+              body: `You have ${finishedItems.length} items completely out of stock. Tap to restock.`,
+              categoryIdentifier: "FINISHED_ITEMS",
+              data: { action: "RESTOCK_ALL", userId },
+            },
+            trigger: null, // immediate
+          });
+          await AsyncStorage.setItem(lastNotifKey, now.toString());
+        }
+      }
     } catch {
       setProducts([]);
     }
@@ -218,8 +250,8 @@ export default function HomeScreen() {
       if (isRefresh) setRefreshing(true);
 
       await Promise.all([
-        fetchProducts(), 
-        fetchCatalog(), 
+        fetchProducts(),
+        fetchCatalog(),
         fetchBudget(),
         fetchNotifications()
       ]);
@@ -398,6 +430,14 @@ export default function HomeScreen() {
     if (key === "ai") {
       router.push({
         pathname: "/ai-assistant",
+        params: { userId: String(userId) },
+      });
+      return;
+    }
+
+    if (key === "smart") {
+      router.push({
+        pathname: "/smart-recommendation",
         params: { userId: String(userId) },
       });
     }

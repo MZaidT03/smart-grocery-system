@@ -10,6 +10,9 @@ import {
   TextInput,
   View,
   Switch,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
 } from "react-native";
 import { API_BASE_URL } from "@/constants/api";
 import { Colors } from "@/constants/theme";
@@ -137,8 +140,9 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <View style={styles.topRow}>
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          <View style={styles.topRow}>
           <ThemeToggle />
         </View>
         <Text style={styles.title}>Welcome back</Text>
@@ -221,7 +225,8 @@ export default function LoginScreen() {
         <Link href="/" style={styles.backLink}>
           Back to landing
         </Link>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

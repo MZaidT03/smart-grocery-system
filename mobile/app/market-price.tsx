@@ -17,6 +17,8 @@ import {
   Text,
   TextInput,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import {
   ArrowLeft,
@@ -581,7 +583,7 @@ export default function MarketPriceScreen() {
           <Text style={styles.loadingText}>Loading market prices</Text>
         </View>
       ) : (
-        <>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
           <FlatList
             data={filteredItems}
             keyExtractor={(item) => String(item.id)}
@@ -714,7 +716,7 @@ export default function MarketPriceScreen() {
               </Text>
             </Pressable>
           </View>
-        </>
+        </KeyboardAvoidingView>
       )}
 
       <ScrapeOptionsModal

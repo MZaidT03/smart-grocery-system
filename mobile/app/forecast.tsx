@@ -13,6 +13,8 @@ import {
   Text,
   TextInput,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import {
   Activity,
@@ -285,6 +287,7 @@ export default function ForecastScreen() {
           <Text style={styles.loadingText}>Loading forecast data</Text>
         </View>
       ) : (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
@@ -844,6 +847,7 @@ export default function ForecastScreen() {
             </>
           )}
         </ScrollView>
+        </KeyboardAvoidingView>
       )}
     </SafeAreaView>
   );

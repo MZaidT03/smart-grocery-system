@@ -10,6 +10,8 @@ import {
   Text,
   TextInput,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { API_BASE_URL } from "@/constants/api";
 import { Colors } from "@/constants/theme";
@@ -82,116 +84,118 @@ export default function RegisterScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <View style={styles.topRow}>
-          <ThemeToggle />
-        </View>
-        <Text style={styles.title}>Create your account</Text>
-        <Text style={styles.subtitle}>
-          Join Smart Grocery and start saving today.
-        </Text>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Username</Text>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            placeholder="Your username"
-            placeholderTextColor={palette.muted}
-            style={styles.input}
-          />
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-            placeholderTextColor={palette.muted}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            style={styles.input}
-          />
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Household size</Text>
-          <TextInput
-            value={householdSize}
-            onChangeText={setHouseholdSize}
-            placeholder="1"
-            placeholderTextColor={palette.muted}
-            keyboardType="number-pad"
-            style={styles.input}
-          />
-        </View>
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Diet preference</Text>
-          <View style={styles.dietRow}>
-            {dietOptions.map((option) => {
-              const isActive = option === dietType;
-              return (
-                <Pressable
-                  key={option}
-                  onPress={() => setDietType(option)}
-                  style={[styles.dietPill, isActive && styles.dietPillActive]}
-                >
-                  <Text
-                    style={[
-                      styles.dietPillText,
-                      isActive && styles.dietPillTextActive,
-                    ]}
-                  >
-                    {option}
-                  </Text>
-                </Pressable>
-              );
-            })}
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          <View style={styles.topRow}>
+            <ThemeToggle />
           </View>
-        </View>
+          <Text style={styles.title}>Create your account</Text>
+          <Text style={styles.subtitle}>
+            Join Smart Grocery and start saving today.
+          </Text>
 
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Create a password"
-            placeholderTextColor={palette.muted}
-            secureTextEntry
-            style={styles.input}
-          />
-        </View>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Username</Text>
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="Your username"
+              placeholderTextColor={palette.muted}
+              style={styles.input}
+            />
+          </View>
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+              placeholderTextColor={palette.muted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              style={styles.input}
+            />
+          </View>
 
-        <Pressable
-          style={[
-            styles.primaryButton,
-            loading && styles.primaryButtonDisabled,
-          ]}
-          onPress={handleRegister}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={palette.background} />
-          ) : (
-            <Text style={styles.primaryButtonText}>Create account</Text>
-          )}
-        </Pressable>
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Household size</Text>
+            <TextInput
+              value={householdSize}
+              onChangeText={setHouseholdSize}
+              placeholder="1"
+              placeholderTextColor={palette.muted}
+              keyboardType="number-pad"
+              style={styles.input}
+            />
+          </View>
 
-        <View style={styles.footerRow}>
-          <Text style={styles.footerText}>Already have an account?</Text>
-          <Link href="/login" style={styles.footerLink}>
-            Log in
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Diet preference</Text>
+            <View style={styles.dietRow}>
+              {dietOptions.map((option) => {
+                const isActive = option === dietType;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => setDietType(option)}
+                    style={[styles.dietPill, isActive && styles.dietPillActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.dietPillText,
+                        isActive && styles.dietPillTextActive,
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              value={password}
+              onChangeText={setPassword}
+              placeholder="Create a password"
+              placeholderTextColor={palette.muted}
+              secureTextEntry
+              style={styles.input}
+            />
+          </View>
+
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+          <Pressable
+            style={[
+              styles.primaryButton,
+              loading && styles.primaryButtonDisabled,
+            ]}
+            onPress={handleRegister}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color={palette.background} />
+            ) : (
+              <Text style={styles.primaryButtonText}>Create account</Text>
+            )}
+          </Pressable>
+
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>Already have an account?</Text>
+            <Link href="/login" style={styles.footerLink}>
+              Log in instead
+            </Link>
+          </View>
+
+          <Link href="/" style={styles.backLink}>
+            Back to landing
           </Link>
-        </View>
-
-        <Link href="/" style={styles.backLink}>
-          Back to landing
-        </Link>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

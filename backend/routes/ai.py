@@ -78,13 +78,102 @@ def extract_mentioned_ingredients(question):
         'noodles': 'noodles',
         'salt': 'salt',
         'pepper': 'pepper',
-        'masala': 'masala'
+        'masala': 'masala',
+        'daal': 'lentils',
+        'lentils': 'lentils',
+        'atta': 'flour',
+        'wheat flour': 'flour',
+        'besan': 'gram flour',
+        'garlic': 'garlic',
+        'ginger': 'ginger',
+        'chilli': 'chilli',
+        'green chilli': 'green chilli',
+        'red chilli': 'red chilli',
+        'turmeric': 'turmeric',
+        'haldi': 'turmeric',
+        'coriander': 'coriander',
+        'dhania': 'coriander',
+        'cumin': 'cumin',
+        'zeera': 'cumin',
+        'garam masala': 'garam masala',
+        'mozzarella': 'cheese',
+        'ketchup': 'ketchup',
+        'mayonnaise': 'mayonnaise'
     }
     found = set()
     for kw, normal_name in ingredients_map.items():
         if kw in q_lower:
             found.add(normal_name)
     return list(found)
+
+def handle_local_queries(question, inventory, products):
+    q_lower = question.lower().strip()
+    
+    # 1. Most expensive item
+    if any(phrase in q_lower for phrase in ["most expensive", "expensive item", "highest price"]):
+        if not inventory:
+            return "Your inventory is currently empty, so I can't find the most expensive item!"
+        
+        valid_items = [i for i in inventory if isinstance(i.get('price'), (int, float))]
+        if not valid_items:
+            return "I couldn't find price information for the items in your inventory."
+            
+        most_expensive = max(valid_items, key=lambda x: x['price'])
+        return f"Sure! Looking at your inventory, the most expensive item is {most_expensive['name']} priced at Rs. {most_expensive['price']}."
+        
+    # 2. Total items check
+    if any(phrase in q_lower for phrase in ["total inventory items", "how many items", "total items", "number of items"]):
+        return f"You currently have {len(inventory)} different items in your pantry."
+
+    # 3. Specific product lookup & Consumption Log lookup
+    for item in inventory:
+        item_name = item['name'].lower()
+        if item_name in q_lower:
+            qty_rounded = round(item.get('quantity', 0), 2)
+            # Check if asking for consumption log
+            if any(phrase in q_lower for phrase in ["consumption log", "consumption of", "consumption rate", "how much do i consume", "average log", "log for"]):
+                avg = item.get('avg_consumption', 0)
+                if avg > 0:
+                    return f"According to your logs, you consume an average of {round(avg, 2)} {item['unit']} of {item['name']} per logged day."
+                else:
+                    return f"I don't have enough consumption data for {item['name']} yet. Keep using the app to log it!"
+            
+            # Check if asking for price or general stock
+            if any(phrase in q_lower for phrase in ["do i have", "i have", "is there", "stock", "quantity", "how many", "price", "how much", "show me", "tell me", "check", "in inventory", "in pantry", "my inventory"]):
+                price_str = f"Rs. {item['price']}" if isinstance(item.get('price'), (int, float)) else "Unknown"
+                return f"Yes! You have {item['name']} in your inventory.\n\nCurrently in stock: {qty_rounded} {item['unit']} at {price_str}."
+
+    # 4. Fallback for very short queries that just mention the item name
+    if len(q_lower.split()) <= 6:
+        for item in inventory:
+            if item['name'].lower() in q_lower:
+                qty_rounded = round(item.get('quantity', 0), 2)
+                
+                # Check again if it was a short query about consumption
+                if any(phrase in q_lower for phrase in ["consumption", "rate", "log"]):
+                    avg = item.get('avg_consumption', 0)
+                    if avg > 0:
+                        return f"According to your logs, you consume an average of {round(avg, 2)} {item['unit']} of {item['name']} per logged day."
+                    else:
+                        return f"I don't have enough consumption data for {item['name']} yet. Keep using the app to log it!"
+                        
+                price_str = f"Rs. {item['price']}" if isinstance(item.get('price'), (int, float)) else "Unknown"
+                return f"You have {item['name']} in your inventory.\n\nCurrently in stock: {qty_rounded} {item['unit']} at {price_str}."
+
+    # 5. Handle items not in inventory
+    # If the user asks if they have something, and we reached here, it means it's not in the inventory.
+    # We use 'products' (which are matching market items) to confirm what they are asking about.
+    if any(phrase in q_lower for phrase in ["do i have", "i have", "is there", "stock", "quantity", "in inventory", "in pantry", "my inventory"]):
+        if products:
+            # The backend heuristic found matching products from the global catalog, but not in inventory.
+            market_item_name = products[0]['name']
+            return f"You do not currently have {market_item_name} in your inventory."
+        
+        # If no market product matched either, but it's a short query, just give a generic local response.
+        if len(q_lower.split()) <= 6:
+            return "I couldn't find that item in your inventory."
+
+    return None
 
 def fetch_relevant_products(question, user_id=None):
     """
@@ -166,12 +255,32 @@ def fetch_relevant_products(question, user_id=None):
     if user_id:
         try:
             conn = get_db_connection()
-            rows = conn.execute("SELECT item_name, current_quantity, consumption_unit FROM products WHERE user_id = ?", (user_id,)).fetchall()
+            query = """
+                SELECT p.item_name, p.current_quantity, p.consumption_unit, 
+                       COALESCE(NULLIF(p.price, 0), ph.price) as price,
+                       COALESCE(cl.avg_consumption, 0) as avg_consumption
+                FROM products p
+                LEFT JOIN (
+                    SELECT item_name, price 
+                    FROM price_history 
+                    GROUP BY item_name 
+                    HAVING MAX(date)
+                ) ph ON p.item_name = ph.item_name
+                LEFT JOIN (
+                    SELECT product_id, AVG(consumed_quantity) as avg_consumption 
+                    FROM consumption_logs 
+                    GROUP BY product_id
+                ) cl ON p.product_id = cl.product_id
+                WHERE p.user_id = ?
+            """
+            rows = conn.execute(query, (user_id,)).fetchall()
             for row in rows:
                 inventory.append({
                     "name": row['item_name'],
                     "quantity": row['current_quantity'],
-                    "unit": row['consumption_unit']
+                    "unit": row['consumption_unit'],
+                    "price": row['price'] if row['price'] else "Unknown",
+                    "avg_consumption": row['avg_consumption']
                 })
         except Exception as e:
             print(f"Inventory Retrieval Error: {e}")
@@ -229,6 +338,20 @@ def ask_assistant():
     products, inventory = fetch_relevant_products(question, user_id)
     recipe_mode = is_recipe_question(question)
     mentioned_ingredients = extract_mentioned_ingredients(question)
+    
+    # Check local handler first for simple queries (non-recipe)
+    if not recipe_mode:
+        local_response = handle_local_queries(question, inventory, products)
+        if local_response:
+            return jsonify({
+                "success": True,
+                "answer": local_response,
+                "products": products,
+                "inventory": inventory,
+                "mentionedIngredients": mentioned_ingredients,
+                "recipeMode": recipe_mode,
+                "mode": "local (Rule-based)"
+            })
     
     gemini_key = os.environ.get("GEMINI_API_KEY")
     
@@ -301,14 +424,15 @@ If products are missing, politely say that no matching product was found.
 Keep the answer short, useful, and friendly.
 Use Pakistani Rupees as Rs.
 Suggest best choices based on price and relevance.
+IMPORTANT: Distinguish between "Available Market Products" and "User's Pantry Items (Inventory)". If the user asks about their own inventory or pantry, ONLY look at "User's Pantry Items".
 
 User question:
 {question}
 
-Available Market Products:
+Available Market Products (from the global store):
 {json.dumps(products, indent=2)}
 
-User's Pantry Items (use these if they ask for recipes from stock):
+User's Pantry Items / Inventory (Items the user currently owns, includes average daily consumption logs):
 {json.dumps(inventory, indent=2)}
 
 Now write the answer."""

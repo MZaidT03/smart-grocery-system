@@ -9,6 +9,8 @@ import {
   Text,
   TextInput,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/context/theme";
@@ -137,6 +139,7 @@ export default function ProductsScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -335,14 +338,14 @@ export default function ProductsScreen() {
                   </Pressable>
                 );
               })}
+              </View>
             </View>
-          </View>
-        )}
+          )}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
-
 const isKnownDays = (product: Product) =>
   product.days_left !== undefined &&
   product.days_left !== null &&

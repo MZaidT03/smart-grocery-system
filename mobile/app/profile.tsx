@@ -13,6 +13,8 @@ import {
   Text,
   TextInput,
   View,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import {
   ArrowLeft,
@@ -142,6 +144,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
       {/* Header */}
       <View style={styles.headerRow}>
         <Pressable onPress={() => router.back()} style={styles.iconButton}>
@@ -297,6 +300,7 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

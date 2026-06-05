@@ -73,6 +73,7 @@ def get_consumption_forecast(consumption_logs):
         return {
             "wma_daily_usage": round(wma_val, 2),
             "seasonal_prediction": seasonal_forecast, 
+            "prophet_prediction": seasonal_forecast,
             "method": method
         }
 

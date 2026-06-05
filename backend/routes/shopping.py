@@ -276,3 +276,213 @@ def suggest_items():
     if not item_name: return jsonify([])
     suggestions = get_market_basket_recommendations(item_name, user_id)
     return jsonify(suggestions)
+
+@shopping_bp.route('/smart-shopping-recommendation', methods=['POST', 'OPTIONS'])
+def smart_shopping_recommendation():
+    if request.method == 'OPTIONS':
+        return jsonify({'success': True}), 200
+        
+    data = request.json
+    user_id = data.get('userId')
+    days = safe_float(data.get('days'), 7)
+    budget = safe_float(data.get('budget'), 999999)
+    
+    if not user_id:
+        return jsonify({"success": False, "error": "User ID required"}), 400
+
+    conn = get_db_connection()
+    try:
+        user_info = conn.execute("SELECT household_size FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        if not user_info:
+            return jsonify({"success": False, "error": "User not found"}), 404
+            
+        household_size = user_info['household_size']
+        
+        # 1. Fetch products with avg_consumption and price
+        query = """
+            SELECT p.product_id, p.item_name, p.category, p.consumption_unit, p.current_quantity, 
+                   p.usage_freq_qty, p.usage_freq_days,
+                   COALESCE(NULLIF(p.price, 0), ph.price) as latest_price,
+                   COALESCE(cl.avg_consumption, 0) as avg_consumption
+            FROM products p
+            LEFT JOIN (
+                SELECT item_name, price 
+                FROM price_history 
+                GROUP BY item_name 
+                HAVING MAX(date)
+            ) ph ON p.item_name = ph.item_name
+            LEFT JOIN (
+                SELECT product_id, AVG(consumed_quantity) as avg_consumption 
+                FROM consumption_logs 
+                GROUP BY product_id
+            ) cl ON p.product_id = cl.product_id
+            WHERE p.user_id = ? AND p.is_active = 1
+        """
+        products = conn.execute(query, (user_id,)).fetchall()
+        
+        recommendations = []
+        total_estimated_cost = 0
+        
+        now = datetime.now().date()
+        
+        for p in products:
+            # 2. Determine daily rate
+            if p['avg_consumption'] > 0:
+                daily_rate = p['avg_consumption']
+            else:
+                u_days = safe_float(p['usage_freq_days'], 1)
+                daily_rate = safe_float(p['usage_freq_qty'], 0) / u_days if u_days > 0 else 0
+                
+            if daily_rate <= 0:
+                continue
+                
+            required_qty = daily_rate * days
+            
+            # 3. Calculate effective stock based on batches
+            batches = conn.execute("SELECT quantity, expiry_date FROM product_batches WHERE product_id = ? AND quantity > 0", (p['product_id'],)).fetchall()
+            
+            effective_stock = 0
+            for b in batches:
+                try:
+                    exp_date = datetime.strptime(b['expiry_date'], "%Y-%m-%d").date()
+                    days_to_expiry = (exp_date - now).days
+                    if days_to_expiry <= 0:
+                        continue
+                    
+                    usable = min(safe_float(b['quantity']), daily_rate * days_to_expiry)
+                    effective_stock += usable
+                except:
+                    effective_stock += safe_float(b['quantity'])
+                    
+            quantity_to_buy = required_qty - effective_stock
+            quantity_to_buy = round(quantity_to_buy * 2) / 2
+            
+            if quantity_to_buy >= 0.5:
+                latest_price = safe_float(p['latest_price'], 0)
+                estimated_cost = quantity_to_buy * latest_price
+                
+                cat_lower = p['category'].lower() if p['category'] else ''
+                if any(k in cat_lower for k in ['dairy', 'produce', 'meat', 'staples', 'grains', 'vegetables', 'fruits', 'groceries', 'pantry']):
+                    priority = 'High'
+                elif any(k in cat_lower for k in ['beverage', 'snack', 'spices', 'condiments']):
+                    priority = 'Medium'
+                else:
+                    priority = 'Low'
+                    
+                reason = "Current stock is not enough for the planned period."
+                if effective_stock < p['current_quantity']:
+                    reason = "Some of your current stock will expire before you can consume it."
+                    
+                recommendations.append({
+                    "item_name": p['item_name'],
+                    "category": p['category'] or 'Other',
+                    "current_stock": round(p['current_quantity'], 2),
+                    "unit": p['consumption_unit'],
+                    "average_daily_consumption": round(daily_rate, 2),
+                    "required_quantity": round(required_qty, 2),
+                    "quantity_to_buy": quantity_to_buy,
+                    "latest_price": latest_price,
+                    "estimated_cost": estimated_cost,
+                    "priority": priority,
+                    "reason": reason
+                })
+                
+                total_estimated_cost += estimated_cost
+                
+        # 4. Budget Guard
+        budget_warning = False
+        if total_estimated_cost > budget:
+            budget_warning = True
+            
+            grouped = {'High': [], 'Medium': [], 'Low': []}
+            for r in recommendations:
+                grouped[r['priority']].append(r)
+                
+            final_recs = []
+            budget_left = budget
+            
+            for p_level in ['High', 'Medium', 'Low']:
+                group_items = grouped[p_level]
+                if not group_items: continue
+                
+                group_cost = sum(r['estimated_cost'] for r in group_items)
+                
+                if budget_left >= group_cost:
+                    final_recs.extend(group_items)
+                    budget_left -= group_cost
+                elif budget_left > 0:
+                    ratio = budget_left / group_cost
+                    for r in group_items:
+                        new_qty = r['quantity_to_buy'] * ratio
+                        new_qty = round(new_qty * 2) / 2
+                        
+                        if new_qty >= 0.5:
+                            r['quantity_to_buy'] = new_qty
+                            r['estimated_cost'] = new_qty * r['latest_price']
+                            r['reason'] = "Quantity reduced to fit within your budget."
+                            final_recs.append(r)
+                            budget_left -= r['estimated_cost']
+                    budget_left = 0
+                    
+            recommendations = final_recs
+            total_estimated_cost = sum(r['estimated_cost'] for r in recommendations)
+            
+        priority_score = {'High': 1, 'Medium': 2, 'Low': 3}
+        recommendations.sort(key=lambda x: priority_score.get(x['priority'], 3))
+        
+        # 5. AI Summary Generation
+        summary = "No items needed."
+        if recommendations:
+            import os, json, requests
+            
+            items_str = ", ".join([f"{r['quantity_to_buy']} {r['unit']} {r['item_name']}" for r in recommendations[:5]])
+            if len(recommendations) > 5:
+                items_str += f" and {len(recommendations)-5} more items"
+            summary = f"Buy {items_str} for the next {int(days)} days. Estimated cost: Rs. {int(total_estimated_cost)}."
+            if budget_warning:
+                summary += " Warning: Some items were reduced to stay within budget."
+                
+            gemini_key = os.environ.get("GEMINI_API_KEY")
+            if gemini_key:
+                prompt = f"""You are the Smart Grocer Shopping Assistant.
+Generate a short 2-sentence summary for this shopping recommendation.
+Rules:
+- Do NOT invent items or prices.
+- Simply read the data below and summarize what the user needs to buy and the total cost.
+- Be friendly. 
+- Mention if the budget was strict.
+
+Total Cost: Rs. {int(total_estimated_cost)}
+Budget: Rs. {int(budget)}
+Budget Exceeded Warning: {budget_warning}
+Items:
+{json.dumps([{ 'name': r['item_name'], 'qty': r['quantity_to_buy'], 'unit': r['unit'] } for r in recommendations])}
+"""
+                try:
+                    res = requests.post(
+                        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+                        json={"contents": [{"parts": [{"text": prompt}]}]},
+                        headers={"Content-Type": "application/json", "x-goog-api-key": gemini_key},
+                        timeout=10
+                    )
+                    res_data = res.json()
+                    if res.status_code == 200 and 'candidates' in res_data:
+                        summary = res_data['candidates'][0]['content']['parts'][0]['text']
+                except Exception as e:
+                    print("AI Summary Error:", e)
+
+        return jsonify({
+            "success": True,
+            "days": days,
+            "budget": budget,
+            "totalEstimatedCost": total_estimated_cost,
+            "recommendations": recommendations,
+            "summary": summary,
+            "budgetWarning": budget_warning
+        })
+
+    except Exception as e:
+        print("Smart Shopping Error:", e)
+        return jsonify({"success": False, "error": str(e)}), 500
+    finally:
+        conn.close()
