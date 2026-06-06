@@ -25,7 +25,10 @@ def extract_recommendations_from_baskets(baskets, target_item_name, conn, limit=
 
     for rule in rules:
         lhs_lower = [item.lower() for item in rule.lhs]
-        if target_lower in lhs_lower:
+        # Restrict to rules where the target item is the ONLY condition.
+        # Otherwise, highly specific rules (e.g. Bread + Cola + Soap -> Shampoo)
+        # get wrongly recommended just because Bread was added!
+        if len(lhs_lower) == 1 and target_lower in lhs_lower:
             matched_rules.append(rule)
 
     matched_rules = sorted(matched_rules, key=lambda r: r.confidence, reverse=True)

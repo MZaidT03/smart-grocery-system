@@ -30,7 +30,9 @@ import {
   Moon,
   Monitor,
   Bell,
-  Sparkles
+  Sparkles,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react-native";
 
 import * as Notifications from "expo-notifications";
@@ -145,6 +147,8 @@ export default function HomeScreen() {
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [quickActionsExpanded, setQuickActionsExpanded] = useState(false);
+  const [pantryPreviewExpanded, setPantryPreviewExpanded] = useState(false);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
@@ -635,29 +639,51 @@ export default function HomeScreen() {
             </View>
 
             <View style={styles.quickActionsSection}>
-              <View style={styles.sectionHeader}>
+              <Pressable 
+                style={[styles.sectionHeader, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                onPress={() => setQuickActionsExpanded(!quickActionsExpanded)}
+              >
                 <View>
                   <Text style={styles.sectionSmallTitle}>Shortcuts</Text>
                   <Text style={styles.sectionTitle}>Quick actions</Text>
                 </View>
-              </View>
+                <View style={{ padding: 4 }}>
+                  {quickActionsExpanded ? (
+                    <ChevronUp size={20} color={colors.text2} />
+                  ) : (
+                    <ChevronDown size={20} color={colors.text2} />
+                  )}
+                </View>
+              </Pressable>
 
-              <View style={styles.quickActionsList}>
-                {actions.map((action) => (
-                  <ActionTile
-                    key={action.key}
-                    colors={colors}
-                    styles={styles}
-                    item={action}
-                    onPress={() => handleQuickAction(action.key)}
-                  />
-                ))}
-              </View>
+              {quickActionsExpanded && (
+                <View style={styles.quickActionsList}>
+                  {actions.map((action) => (
+                    <ActionTile
+                      key={action.key}
+                      colors={colors}
+                      styles={styles}
+                      item={action}
+                      onPress={() => handleQuickAction(action.key)}
+                    />
+                  ))}
+                </View>
+              )}
             </View>
 
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Pantry preview</Text>
+                <Pressable 
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                  onPress={() => setPantryPreviewExpanded(!pantryPreviewExpanded)}
+                >
+                  <Text style={styles.sectionTitle}>Pantry preview</Text>
+                  {pantryPreviewExpanded ? (
+                    <ChevronUp size={20} color={colors.text2} />
+                  ) : (
+                    <ChevronDown size={20} color={colors.text2} />
+                  )}
+                </Pressable>
 
                 <Pressable
                   onPress={() =>
@@ -674,28 +700,30 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
 
-              <ProductPreview
-                loading={loading}
-                products={products}
-                onViewAll={() =>
-                  router.push({
-                    pathname: "/products",
-                    params: {
-                      userId: String(userId),
-                      name: displayName ?? "",
-                    },
-                  })
-                }
-                onPressProduct={(product: Product) =>
-                  router.push({
-                    pathname: "/product",
-                    params: {
-                      userId: String(userId),
-                      productId: String(product.id),
-                    },
-                  })
-                }
-              />
+              {pantryPreviewExpanded && (
+                <ProductPreview
+                  loading={loading}
+                  products={products}
+                  onViewAll={() =>
+                    router.push({
+                      pathname: "/products",
+                      params: {
+                        userId: String(userId),
+                        name: displayName ?? "",
+                      },
+                    })
+                  }
+                  onPressProduct={(product: Product) =>
+                    router.push({
+                      pathname: "/product",
+                      params: {
+                        userId: String(userId),
+                        productId: String(product.id),
+                      },
+                    })
+                  }
+                />
+              )}
             </View>
 
             <View style={styles.section}>

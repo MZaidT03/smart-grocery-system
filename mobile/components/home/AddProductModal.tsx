@@ -1,6 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,7 +10,58 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useTheme } from "@/context/theme"; // Using your updated theme context
+import { useTheme } from "@/context/theme";
+
+// Standard text input field
+const Field = ({ label, value, onChangeText, keyboardType = "default", placeholder = "", styles }: any) => (
+  <View style={styles.field}>
+    <Text style={styles.label}>{label}</Text>
+    <TextInput
+      value={value}
+      onChangeText={onChangeText}
+      keyboardType={keyboardType}
+      placeholder={placeholder}
+      placeholderTextColor={styles.placeholder.color}
+      style={styles.input}
+    />
+  </View>
+);
+
+// Minimal Dropdown Component
+const SelectField = ({ label, value, options, onSelect, expanded, onToggle, styles }: any) => (
+  <View style={styles.field}>
+    <Text style={styles.label}>{label}</Text>
+    <Pressable style={styles.selectInput} onPress={onToggle}>
+      <Text style={[styles.selectValue, !value && styles.placeholder]}>
+        {value || `Select ${label}`}
+      </Text>
+      <Text style={styles.chevron}>{expanded ? "▲" : "▼"}</Text>
+    </Pressable>
+
+    {expanded && options && options.length > 0 && (
+      <View style={styles.dropdown}>
+        {options.map((item: string) => (
+          <Pressable
+            key={item}
+            style={[styles.dropdownItem, value === item && styles.dropdownItemActive]}
+            onPress={() => {
+              onSelect(item);
+              onToggle(); // Close after selection
+            }}
+          >
+            <Text style={[styles.dropdownItemText, value === item && styles.dropdownItemTextActive]}>
+              {item}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    )}
+  </View>
+);
+
+const SectionHeader = ({ title, styles }: any) => (
+  <Text style={styles.sectionHeader}>{title}</Text>
+);
 
 export default function AddProductModal({
   visible,
@@ -33,211 +86,315 @@ export default function AddProductModal({
   unitSuggestions,
   categorySuggestions,
 }: any) {
-  // Pull the pure black/white/green minimal colors directly from the context
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
+  // Track which dropdown is currently open (null, 'unit', or 'category')
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+  const toggleDropdown = (dropdownName: string) => {
+    setOpenDropdown(openDropdown === dropdownName ? null : dropdownName);
+  };
+
   return (
-    <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.backdrop}>
+    <Modal visible={visible} transparent animationType="fade">
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <Pressable style={styles.backdrop} onPress={onClose} />
+
         <View style={styles.card}>
-          <Text style={styles.title}>Add product</Text>
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.title}>Add product</Text>
+            </View>
+            <Pressable onPress={onClose} style={styles.closeButton}>
+              <Text style={styles.closeText}>×</Text>
+            </Pressable>
+          </View>
+
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
           >
-            <TextInput
+            <Field
+              label="Name"
               value={productName}
               onChangeText={onProductName}
-              placeholder="Item name"
-              placeholderTextColor={colors.text3}
-              style={styles.input}
+              placeholder="e.g., Basmati Rice"
+              styles={styles}
             />
 
-            <TextInput
-              value={productUnit}
-              onChangeText={onProductUnit}
-              placeholder="Unit (e.g., kg, pcs)"
-              placeholderTextColor={colors.text3}
-              style={styles.input}
-            />
-            {unitSuggestions && unitSuggestions.length > 0 && (
-              <View style={styles.chipRow}>
-                {unitSuggestions.map((unit: string) => (
-                  <Pressable
-                    key={unit}
-                    style={styles.chip}
-                    onPress={() => onProductUnit(unit)}
-                  >
-                    <Text style={styles.chipText}>{unit}</Text>
-                  </Pressable>
-                ))}
+            <View style={styles.twoColumn}>
+              <View style={styles.column}>
+                <Field
+                  label="Quantity"
+                  value={productQuantity}
+                  onChangeText={onProductQuantity}
+                  keyboardType="decimal-pad"
+                  placeholder="0.0"
+                  styles={styles}
+                />
               </View>
-            )}
+              <View style={styles.column}>
+                <SelectField
+                  label="Unit"
+                  value={productUnit}
+                  options={unitSuggestions}
+                  expanded={openDropdown === 'unit'}
+                  onToggle={() => toggleDropdown('unit')}
+                  onSelect={onProductUnit}
+                  styles={styles}
+                />
+              </View>
+            </View>
 
-            <TextInput
-              value={productQuantity}
-              onChangeText={onProductQuantity}
-              placeholder="Quantity"
-              placeholderTextColor={colors.text3}
-              keyboardType="decimal-pad"
-              style={styles.input}
-            />
-
-            <TextInput
+            <SelectField
+              label="Category"
               value={productCategory}
-              onChangeText={onProductCategory}
-              placeholder="Category"
-              placeholderTextColor={colors.text3}
-              style={styles.input}
+              options={categorySuggestions}
+              expanded={openDropdown === 'category'}
+              onToggle={() => toggleDropdown('category')}
+              onSelect={onProductCategory}
+              styles={styles}
             />
-            {categorySuggestions && categorySuggestions.length > 0 && (
-              <View style={styles.chipRow}>
-                {categorySuggestions.map((category: string) => (
-                  <Pressable
-                    key={category}
-                    style={styles.chip}
-                    onPress={() => onProductCategory(category)}
-                  >
-                    <Text style={styles.chipText}>{category}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
 
-            <TextInput
-              value={usageQty}
-              onChangeText={onUsageQty}
-              placeholder="Usage quantity"
-              placeholderTextColor={colors.text3}
-              keyboardType="decimal-pad"
-              style={styles.input}
-            />
-            <TextInput
-              value={usageDays}
-              onChangeText={onUsageDays}
-              placeholder="Usage days"
-              placeholderTextColor={colors.text3}
-              keyboardType="decimal-pad"
-              style={styles.input}
-            />
-            <TextInput
-              value={productPrice}
-              onChangeText={onProductPrice}
-              placeholder="Price per unit"
-              placeholderTextColor={colors.text3}
-              keyboardType="decimal-pad"
-              style={styles.input}
-            />
-            <TextInput
-              value={shelfLife}
-              onChangeText={onShelfLife}
-              placeholder="Shelf life days"
-              placeholderTextColor={colors.text3}
-              keyboardType="number-pad"
-              style={styles.input}
-            />
+            <View style={styles.divider} />
+            <SectionHeader title="Inventory Tracking (Optional)" styles={styles} />
+
+            <View style={styles.twoColumn}>
+              <View style={styles.column}>
+                <Field
+                  label="Usage Qty"
+                  value={usageQty}
+                  onChangeText={onUsageQty}
+                  keyboardType="decimal-pad"
+                  placeholder="0.0"
+                  styles={styles}
+                />
+              </View>
+              <View style={styles.column}>
+                <Field
+                  label="Usage Days"
+                  value={usageDays}
+                  onChangeText={onUsageDays}
+                  keyboardType="decimal-pad"
+                  placeholder="Days"
+                  styles={styles}
+                />
+              </View>
+            </View>
+
+            <View style={styles.twoColumn}>
+              <View style={styles.column}>
+                <Field
+                  label="Price"
+                  value={productPrice}
+                  onChangeText={onProductPrice}
+                  keyboardType="decimal-pad"
+                  placeholder="$0.00"
+                  styles={styles}
+                />
+              </View>
+              <View style={styles.column}>
+                <Field
+                  label="Shelf Life"
+                  value={shelfLife}
+                  onChangeText={onShelfLife}
+                  keyboardType="number-pad"
+                  placeholder="Days"
+                  styles={styles}
+                />
+              </View>
+            </View>
           </ScrollView>
-          <View style={styles.actions}>
-            <Pressable style={styles.secondaryButton} onPress={onClose}>
-              <Text style={styles.secondaryButtonText}>Cancel</Text>
+
+          <View style={styles.footer}>
+            <Pressable style={styles.cancelButton} onPress={onClose}>
+              <Text style={styles.cancelText}>Cancel</Text>
             </Pressable>
-            <Pressable style={styles.primaryButton} onPress={onSave}>
-              <Text style={styles.primaryButtonText}>Save</Text>
+            <Pressable style={styles.saveButton} onPress={onSave}>
+              <Text style={styles.saveText}>Save</Text>
             </Pressable>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
-// Map everything to the new dynamic colors context
 const createStyles = (colors: any) =>
   StyleSheet.create({
-    backdrop: {
+    container: {
       flex: 1,
-      backgroundColor: "rgba(0,0,0,0.5)", // Darkened slightly to make the modal pop against the background
-      justifyContent: "center",
-      padding: 20,
+      justifyContent: "flex-end",
+    },
+    backdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: "rgba(0,0,0,0.5)",
     },
     card: {
+      maxHeight: "90%",
       backgroundColor: colors.surface1,
-      borderRadius: 20,
-      padding: 20,
-      maxHeight: "85%",
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      overflow: "hidden",
     },
-    title: {
-      fontSize: 18,
-      fontWeight: "700",
-      color: colors.text1,
-      marginBottom: 16,
-    },
-    scrollContent: {
-      paddingBottom: 10,
-    },
-    input: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 14,
-      paddingHorizontal: 16,
-      paddingVertical: 14, // Slightly larger touch targets
-      backgroundColor: colors.surface1,
-      color: colors.text1,
-      marginBottom: 12,
-    },
-    chipRow: {
-      flexDirection: "row",
-      flexWrap: "wrap",
-      gap: 8,
-      marginBottom: 16,
-      marginTop: -4, // Pull closer to the input it belongs to
-    },
-    chip: {
-      backgroundColor: colors.surface2,
-      borderRadius: 999,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    chipText: {
-      color: colors.text1,
-      fontSize: 12,
-      fontWeight: "500",
-    },
-    actions: {
+    header: {
+      paddingHorizontal: 24,
+      paddingTop: 24,
+      paddingBottom: 16,
       flexDirection: "row",
       justifyContent: "space-between",
-      gap: 12,
-      marginTop: 16,
-    },
-    primaryButton: {
-      flex: 1, // Makes buttons equal width
-      backgroundColor: colors.accent1,
-      borderRadius: 14,
-      paddingVertical: 14,
       alignItems: "center",
     },
-    primaryButtonText: {
-      color: colors.bg, // Automatically flips text color for contrast
+    title: {
+      fontSize: 22,
+      fontWeight: "800",
+      color: colors.text1,
+    },
+    closeButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface2,
+    },
+    closeText: {
+      fontSize: 20,
+      color: colors.text2 || colors.text1,
+      fontWeight: "600",
+    },
+    content: {
+      paddingHorizontal: 24,
+      paddingBottom: 24,
+    },
+    sectionHeader: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: colors.text3,
+      marginTop: 8,
+      marginBottom: 16,
+      letterSpacing: 0.5,
+      textTransform: "uppercase",
+    },
+    field: {
+      marginBottom: 16,
+    },
+    label: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: colors.text3,
+      marginBottom: 8,
+    },
+    input: {
+      height: 52,
+      borderRadius: 12,
+      backgroundColor: colors.surface2,
+      color: colors.text1,
+      paddingHorizontal: 16,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+    placeholder: {
+      color: colors.text3,
+    },
+    twoColumn: {
+      flexDirection: "row",
+      gap: 12,
+    },
+    column: {
+      flex: 1,
+    },
+    selectInput: {
+      height: 52,
+      borderRadius: 12,
+      backgroundColor: colors.surface2,
+      paddingHorizontal: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    selectValue: {
+      color: colors.text1,
+      fontSize: 15,
+      fontWeight: "500",
+    },
+    chevron: {
+      color: colors.text3,
+      fontSize: 12,
+    },
+    dropdown: {
+      marginTop: 6,
+      backgroundColor: colors.surface2,
+      borderRadius: 12,
+      padding: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+    },
+    dropdownItem: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: colors.surface1,
+    },
+    dropdownItemActive: {
+      backgroundColor: colors.accent1,
+    },
+    dropdownItemText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.text1,
+    },
+    dropdownItemTextActive: {
+      color: colors.bg,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: colors.border,
+      marginTop: 4,
+      marginBottom: 16,
+      opacity: 0.5,
+    },
+    footer: {
+      flexDirection: "row",
+      gap: 12,
+      padding: 20,
+      paddingBottom: Platform.OS === "ios" ? 34 : 20,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      backgroundColor: colors.surface1,
+    },
+    cancelButton: {
+      flex: 1,
+      height: 50,
+      borderRadius: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.surface2,
+    },
+    cancelText: {
+      color: colors.text1,
       fontSize: 15,
       fontWeight: "700",
     },
-    secondaryButton: {
-      flex: 1, // Makes buttons equal width
-      backgroundColor: colors.surface1,
-      borderRadius: 14,
-      paddingVertical: 14,
+    saveButton: {
+      flex: 1.5,
+      height: 50,
+      borderRadius: 12,
       alignItems: "center",
-      borderWidth: 1,
-      borderColor: colors.border,
+      justifyContent: "center",
+      backgroundColor: colors.accent1,
     },
-    secondaryButtonText: {
-      color: colors.text1,
+    saveText: {
+      color: colors.bg,
       fontSize: 15,
-      fontWeight: "600",
+      fontWeight: "800",
     },
   });

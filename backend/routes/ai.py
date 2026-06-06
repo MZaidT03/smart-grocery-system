@@ -109,6 +109,25 @@ def extract_mentioned_ingredients(question):
 def handle_local_queries(question, inventory, products):
     q_lower = question.lower().strip()
     
+    # 0. Greetings & Goodbyes
+    if q_lower in ["hi", "hello", "hey", "greetings", "hi there", "hello there"]:
+        return "Hello! I am your Smart Grocer Assistant. How can I help you today?"
+    if q_lower in ["bye", "goodbye", "see ya", "exit", "quit", "stop"]:
+        return "Goodbye! Have a great day!"
+        
+    # 0.5 Low Stock & Watch List
+    if any(phrase in q_lower for phrase in ["low item", "low stock", "running out", "running low", "low in pantry", "low inventory", "on low"]):
+        low_items = [i['name'] for i in inventory if i.get('days_left', -1) != -1 and i['days_left'] < 3]
+        if low_items:
+            return f"You have {len(low_items)} items running critically low: {', '.join(low_items)}."
+        return "Great news! You don't have any items running low right now."
+
+    if any(phrase in q_lower for phrase in ["watch", "on watch", "watch list"]):
+        watch_items = [i['name'] for i in inventory if i.get('days_left', -1) != -1 and 3 <= i.get('days_left', -1) < 7]
+        if watch_items:
+            return f"You have {len(watch_items)} items on your watch list: {', '.join(watch_items)}."
+        return "You don't have any items currently on the watch list."
+    
     # 1. Most expensive item
     if any(phrase in q_lower for phrase in ["most expensive", "expensive item", "highest price"]):
         if not inventory:
@@ -164,8 +183,8 @@ def handle_local_queries(question, inventory, products):
     # If the user asks if they have something, and we reached here, it means it's not in the inventory.
     # We use 'products' (which are matching market items) to confirm what they are asking about.
     if any(phrase in q_lower for phrase in ["do i have", "i have", "is there", "stock", "quantity", "in inventory", "in pantry", "my inventory"]):
-        if products:
-            # The backend heuristic found matching products from the global catalog, but not in inventory.
+        # Make sure they actually asked about a specific item, not a general query that already bypassed
+        if products and len(q_lower.split()) <= 10:
             market_item_name = products[0]['name']
             return f"You do not currently have {market_item_name} in your inventory."
         
@@ -256,9 +275,10 @@ def fetch_relevant_products(question, user_id=None):
         try:
             conn = get_db_connection()
             query = """
-                SELECT p.item_name, p.current_quantity, p.consumption_unit, 
+                SELECT p.item_name, p.current_quantity, p.consumption_unit, p.usage_freq_qty, p.usage_freq_days,
                        COALESCE(NULLIF(p.price, 0), ph.price) as price,
-                       COALESCE(cl.avg_consumption, 0) as avg_consumption
+                       COALESCE((SELECT AVG(avg_consumption_rate) FROM consumption_summary cs 
+                         WHERE cs.product_id = p.product_id AND cs.summary_date >= date('now', '-30 days')), 0) as historical_daily_rate
                 FROM products p
                 LEFT JOIN (
                     SELECT item_name, price 
@@ -266,21 +286,31 @@ def fetch_relevant_products(question, user_id=None):
                     GROUP BY item_name 
                     HAVING MAX(date)
                 ) ph ON p.item_name = ph.item_name
-                LEFT JOIN (
-                    SELECT product_id, AVG(consumed_quantity) as avg_consumption 
-                    FROM consumption_logs 
-                    GROUP BY product_id
-                ) cl ON p.product_id = cl.product_id
-                WHERE p.user_id = ?
+                WHERE p.user_id = ? AND p.is_active = 1
             """
             rows = conn.execute(query, (user_id,)).fetchall()
             for row in rows:
+                qty = float(row['current_quantity']) if row['current_quantity'] is not None else 0
+                manual_qty = float(row['usage_freq_qty']) if row['usage_freq_qty'] is not None else 1
+                manual_days = float(row['usage_freq_days']) if row['usage_freq_days'] is not None else 1
+                manual_daily_rate = manual_qty / manual_days if manual_days > 0 else 0
+                historical_rate = float(row['historical_daily_rate']) if row['historical_daily_rate'] is not None else 0
+                
+                if manual_days > 1 or manual_qty != 1: 
+                    effective_rate = manual_daily_rate
+                elif historical_rate > 0: 
+                    effective_rate = historical_rate
+                else: 
+                    effective_rate = manual_daily_rate
+                    
+                days_left = qty / effective_rate if effective_rate > 0 else -1
+
                 inventory.append({
                     "name": row['item_name'],
-                    "quantity": row['current_quantity'],
+                    "quantity": qty,
                     "unit": row['consumption_unit'],
                     "price": row['price'] if row['price'] else "Unknown",
-                    "avg_consumption": row['avg_consumption']
+                    "days_left": days_left
                 })
         except Exception as e:
             print(f"Inventory Retrieval Error: {e}")

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from "react";
+import React, { useState, useRef, useMemo, memo } from "react";
 import {
   SafeAreaView,
   View,
@@ -11,11 +11,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Keyboard,
+  FlatList,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { ArrowLeft, Send, Sparkles, Bot } from "lucide-react-native";
 import { useTheme } from "@/context/theme";
-import { useLocalSearchParams } from "expo-router";
 import { API_BASE_URL } from "@/constants/api";
 
 type Message = {
@@ -30,8 +30,10 @@ const SUGGESTIONS = [
   "What can I cook with milk?",
   "Dinner from my pantry",
   "Quick breakfast idea",
-  "Recipe with milk and cocoa powder",
+  "Recipe with milk and cocoa",
 ];
+
+// Simple global state for persistence across unmounts
 let globalMessages: Message[] = [
   {
     id: "1",
@@ -40,23 +42,64 @@ let globalMessages: Message[] = [
   },
 ];
 
+/**
+ * Handles bolding (**text**) AND line breaks (\n) which are common in AI responses.
+ */
 const renderMessageText = (text: string, baseStyle: any) => {
-  const parts = text.split(/(\*\*.*?\*\*)/g);
-  return (
-    <Text style={baseStyle}>
-      {parts.map((part, index) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return (
-            <Text key={index} style={{ fontWeight: 'bold' }}>
-              {part.slice(2, -2)}
-            </Text>
-          );
-        }
-        return <Text key={index}>{part}</Text>;
-      })}
-    </Text>
-  );
+  const paragraphs = text.split("\n");
+
+  return paragraphs.map((paragraph, pIndex) => {
+    if (!paragraph.trim()) {
+      return <View key={pIndex} style={{ height: 8 }} />; // Spacing for empty lines
+    }
+
+    const parts = paragraph.split(/(\*\*.*?\*\*)/g);
+    return (
+      <Text key={pIndex} style={[baseStyle, { marginBottom: 2 }]}>
+        {parts.map((part, index) => {
+          if (part.startsWith("**") && part.endsWith("**")) {
+            return (
+              <Text key={index} style={{ fontWeight: "800" }}>
+                {part.slice(2, -2)}
+              </Text>
+            );
+          }
+          return <Text key={index}>{part}</Text>;
+        })}
+      </Text>
+    );
+  });
 };
+
+/**
+ * Memoized Message Item to prevent re-rendering the whole list on every keystroke
+ */
+const MessageItem = memo(({ msg, styles, colors }: any) => {
+  const isUser = msg.isUser;
+
+  return (
+    <View style={[styles.messageRow, isUser ? styles.messageRowUser : styles.messageRowAssistant]}>
+      {!isUser && (
+        <View style={styles.avatar}>
+          <Bot size={18} color={colors.accent1} />
+        </View>
+      )}
+      <View style={styles.messageBubbleWrapper}>
+        <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.assistantBubble]}>
+          <View>
+            {renderMessageText(
+              msg.text,
+              [styles.messageText, isUser ? styles.userText : styles.assistantText]
+            )}
+          </View>
+        </View>
+        {!isUser && msg.mode && (
+          <Text style={styles.modelFooterText}>✨ Powered by {msg.mode}</Text>
+        )}
+      </View>
+    </View>
+  );
+});
 
 export default function AiAssistantScreen() {
   const { colors } = useTheme();
@@ -64,51 +107,50 @@ export default function AiAssistantScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const userId = Array.isArray(params.userId) ? params.userId[0] : params.userId;
-  
+
   const [messages, setMessages] = useState<Message[]>(globalMessages);
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
-  const scrollViewRef = useRef<ScrollView>(null);
+
+  const flatListRef = useRef<FlatList>(null);
 
   const sendMessage = async (text: string) => {
     if (!text.trim()) return;
 
     const userMessage: Message = { id: Date.now().toString(), text, isUser: true };
-    
     const newMessages = [...messages, userMessage];
+
     setMessages(newMessages);
     globalMessages = newMessages;
-    
+
     setInputText("");
     setLoading(true);
     Keyboard.dismiss();
 
     try {
-      const historyPayload = messages.map(m => ({
+      const historyPayload = messages.map((m) => ({
         role: m.isUser ? "user" : "model",
-        text: m.text
+        text: m.text,
       }));
 
       const res = await fetch(`${API_BASE_URL}/api/ai/ask`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ 
-          question: text, 
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: text,
           userId,
-          history: historyPayload
+          history: historyPayload,
         }),
       });
       const data = await res.json();
-      
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: data.success ? data.answer : "Sorry, I encountered an error trying to answer that.",
         isUser: false,
         mode: data.mode,
       };
-      
+
       setMessages((prev) => {
         const updated = [...prev, assistantMessage];
         globalMessages = updated;
@@ -130,35 +172,34 @@ export default function AiAssistantScreen() {
     }
   };
 
-  useEffect(() => {
-    // Auto-scroll to bottom when messages change
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  }, [messages, loading]);
+  const scrollToBottom = () => {
+    if (messages.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView 
-        style={{ flex: 1 }} 
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backButton}>
             <ArrowLeft size={20} color={colors.text1} />
           </Pressable>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>Smart Grocer Assistant</Text>
-            <Text style={styles.headerSubtitle}>Ask about products, budget & ideas</Text>
+            <Text style={styles.headerTitle}>Assistant</Text>
+            <Text style={styles.headerSubtitle}>Ask about products & ideas</Text>
           </View>
-          <View style={{ width: 44 }} /> {/* Spacer for balance */}
+          <View style={{ width: 44 }} />
         </View>
 
-        {/* Suggestion Chips */}
         <View>
-          <ScrollView 
-            horizontal 
+          <ScrollView
+            horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.suggestionsContainer}
           >
@@ -169,79 +210,53 @@ export default function AiAssistantScreen() {
                 onPress={() => sendMessage(suggestion)}
                 disabled={loading}
               >
-                <Sparkles size={12} color={colors.accent1} style={{ marginRight: 4 }} />
+                <Sparkles size={14} color={colors.accent1} />
                 <Text style={styles.suggestionText}>{suggestion}</Text>
               </Pressable>
             ))}
           </ScrollView>
         </View>
 
-        {/* Chat List */}
-        <ScrollView 
-          ref={scrollViewRef}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => <MessageItem msg={item} styles={styles} colors={colors} />}
           contentContainerStyle={styles.chatContainer}
           showsVerticalScrollIndicator={false}
-        >
-          {messages.map((msg) => (
-            <View 
-              key={msg.id} 
-              style={[
-                styles.messageRow, 
-                msg.isUser ? styles.messageRowUser : styles.messageRowAssistant
-              ]}
-            >
-              {!msg.isUser && (
-                <View style={[styles.avatar, { backgroundColor: colors.surface2 }]}>
+          onContentSizeChange={scrollToBottom}
+          onLayout={scrollToBottom}
+          ListFooterComponent={
+            loading ? (
+              <View style={[styles.messageRow, styles.messageRowAssistant]}>
+                <View style={styles.avatar}>
                   <Bot size={18} color={colors.accent1} />
                 </View>
-              )}
-              <View style={styles.messageBubbleWrapper}>
-                <View 
-                  style={[
-                    styles.messageBubble, 
-                    msg.isUser ? styles.userBubble : styles.assistantBubble
-                  ]}
-                >
-                  {renderMessageText(
-                    msg.text,
-                    [styles.messageText, msg.isUser ? styles.userText : styles.assistantText]
-                  )}
+                <View style={[styles.messageBubble, styles.assistantBubble, styles.loadingBubble]}>
+                  <ActivityIndicator size="small" color={colors.accent1} />
+                  <Text style={styles.assistantText}>Thinking...</Text>
                 </View>
-                {!msg.isUser && msg.mode && (
-                  <Text style={styles.modelFooterText}>
-                    ✨ Powered by {msg.mode}
-                  </Text>
-                )}
               </View>
-            </View>
-          ))}
-          {loading && (
-            <View style={[styles.messageRow, styles.messageRowAssistant]}>
-              <View style={[styles.avatar, { backgroundColor: colors.surface2 }]}>
-                <Bot size={18} color={colors.accent1} />
-              </View>
-              <View style={[styles.messageBubble, styles.assistantBubble, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-                <ActivityIndicator size="small" color={colors.accent1} />
-                <Text style={styles.assistantText}>Thinking...</Text>
-              </View>
-            </View>
-          )}
-        </ScrollView>
+            ) : null
+          }
+        />
 
-        {/* Input Area */}
         <View style={styles.inputContainer}>
           <TextInput
             value={inputText}
             onChangeText={setInputText}
-            placeholder="Ask me: snacks under Rs. 500..."
+            placeholder="Ask anything..."
             placeholderTextColor={colors.text3}
             style={styles.textInput}
             onSubmitEditing={() => sendMessage(inputText)}
             returnKeyType="send"
             editable={!loading}
           />
-          <Pressable 
-            style={[styles.sendButton, loading || !inputText.trim() ? styles.sendButtonDisabled : {}]} 
+          <Pressable
+            style={[
+              styles.sendButton,
+              (loading || !inputText.trim()) && styles.sendButtonDisabled,
+            ]}
             onPress={() => sendMessage(inputText)}
             disabled={loading || !inputText.trim()}
           >
@@ -264,14 +279,15 @@ const createStyles = (colors: any) =>
       alignItems: "center",
       justifyContent: "space-between",
       paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingVertical: 12,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+      backgroundColor: colors.bg,
     },
     backButton: {
-      width: 44,
-      height: 44,
-      borderRadius: 15,
+      width: 40,
+      height: 40,
+      borderRadius: 12,
       backgroundColor: colors.surface1,
       borderWidth: 1,
       borderColor: colors.border,
@@ -282,8 +298,8 @@ const createStyles = (colors: any) =>
       alignItems: "center",
     },
     headerTitle: {
-      fontSize: 18,
-      fontWeight: "800",
+      fontSize: 17,
+      fontWeight: "700",
       color: colors.text1,
     },
     headerSubtitle: {
@@ -293,8 +309,8 @@ const createStyles = (colors: any) =>
     },
     suggestionsContainer: {
       paddingHorizontal: 20,
-      paddingVertical: 12,
-      gap: 8,
+      paddingVertical: 16,
+      gap: 10,
     },
     suggestionChip: {
       flexDirection: "row",
@@ -302,14 +318,15 @@ const createStyles = (colors: any) =>
       backgroundColor: colors.surface1,
       borderWidth: 1,
       borderColor: colors.border,
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 999,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 20,
+      gap: 6,
     },
     suggestionText: {
       fontSize: 13,
       color: colors.text1,
-      fontWeight: "600",
+      fontWeight: "500",
     },
     chatContainer: {
       paddingHorizontal: 20,
@@ -319,7 +336,7 @@ const createStyles = (colors: any) =>
     messageRow: {
       flexDirection: "row",
       alignItems: "flex-end",
-      marginBottom: 4,
+      marginBottom: 6,
     },
     messageRowUser: {
       justifyContent: "flex-end",
@@ -331,9 +348,10 @@ const createStyles = (colors: any) =>
       width: 32,
       height: 32,
       borderRadius: 16,
+      backgroundColor: colors.surface2,
       alignItems: "center",
       justifyContent: "center",
-      marginRight: 8,
+      marginRight: 10,
     },
     messageBubbleWrapper: {
       maxWidth: "80%",
@@ -344,7 +362,7 @@ const createStyles = (colors: any) =>
       borderRadius: 20,
     },
     userBubble: {
-      backgroundColor: colors.text1, // Pure dark for high contrast minimal
+      backgroundColor: colors.text1,
       borderBottomRightRadius: 4,
     },
     assistantBubble: {
@@ -352,6 +370,11 @@ const createStyles = (colors: any) =>
       borderWidth: 1,
       borderColor: colors.border,
       borderBottomLeftRadius: 4,
+    },
+    loadingBubble: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
     },
     messageText: {
       fontSize: 15,
@@ -364,32 +387,34 @@ const createStyles = (colors: any) =>
       color: colors.text1,
     },
     modelFooterText: {
-      fontSize: 10,
+      fontSize: 11,
       color: colors.text3,
-      marginTop: 4,
+      marginTop: 6,
       marginLeft: 4,
-      fontStyle: 'italic',
+      fontStyle: "italic",
     },
     inputContainer: {
       flexDirection: "row",
       padding: 16,
-      paddingBottom: Platform.OS === 'ios' ? 24 : 16,
+      paddingBottom: Platform.OS === "ios" ? 34 : 16, // Better safe area handling
       borderTopWidth: 1,
       borderTopColor: colors.border,
-      backgroundColor: colors.bg,
+      backgroundColor: colors.surface1, // Slightly offset from background
       alignItems: "center",
       gap: 12,
     },
     textInput: {
       flex: 1,
-      backgroundColor: colors.surface1,
+      backgroundColor: colors.bg,
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 24,
       paddingHorizontal: 20,
-      paddingVertical: 14,
+      paddingTop: 14,
+      paddingBottom: 14,
       fontSize: 15,
       color: colors.text1,
+      maxHeight: 100, // Allows for multiline expansion later if needed
     },
     sendButton: {
       width: 48,
@@ -400,6 +425,6 @@ const createStyles = (colors: any) =>
       justifyContent: "center",
     },
     sendButtonDisabled: {
-      opacity: 0.5,
+      opacity: 0.4,
     },
   });
