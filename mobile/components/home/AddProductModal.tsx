@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -9,8 +9,10 @@ import {
   Text,
   TextInput,
   View,
+  Keyboard,
 } from "react-native";
 import { useTheme } from "@/context/theme";
+import { API_BASE_URL } from "@/constants/api";
 
 // Standard text input field
 const Field = ({ label, value, onChangeText, keyboardType = "default", placeholder = "", styles }: any) => (
@@ -85,12 +87,29 @@ export default function AddProductModal({
   onShelfLife,
   unitSuggestions,
   categorySuggestions,
+  userProducts = [],
 }: any) {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
   // Track which dropdown is currently open (null, 'unit', or 'category')
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+  
+  const [catalog, setCatalog] = useState<any[]>([]);
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      fetch(`${API_BASE_URL}/catalog`)
+        .then(res => res.json())
+        .then(data => setCatalog(data))
+        .catch(err => console.error("Failed to fetch catalog", err));
+    } else {
+      setShowSuggestions(false);
+      setSuggestions([]);
+    }
+  }, [visible]);
 
   const toggleDropdown = (dropdownName: string) => {
     setOpenDropdown(openDropdown === dropdownName ? null : dropdownName);
@@ -119,13 +138,91 @@ export default function AddProductModal({
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled"
           >
-            <Field
-              label="Name"
-              value={productName}
-              onChangeText={onProductName}
-              placeholder="e.g., Basmati Rice"
-              styles={styles}
-            />
+            <View style={{ zIndex: 10, marginBottom: 16 }}>
+              <Text style={styles.label}>Name</Text>
+              <TextInput
+                value={productName}
+                onChangeText={(text) => {
+                  onProductName(text);
+                  if (text) {
+                    const lowerText = text.toLowerCase();
+                    
+                    // First search in user's previous products
+                    const userMatches = userProducts
+                      .filter((p: any) => p.name.toLowerCase().includes(lowerText))
+                      .map((p: any) => ({
+                        item_name: p.name,
+                        category: p.category,
+                        consumption_unit: p.unit,
+                        default_freq_qty: p.usage_freq_qty,
+                        default_freq_days: p.usage_freq_days,
+                        price: p.price,
+                        is_user_product: true
+                      }));
+
+                    // Then search in catalog
+                    const catalogMatches = catalog
+                      .filter((item) => item.item_name.toLowerCase().includes(lowerText))
+                      .map((item) => ({
+                        ...item,
+                        is_user_product: false
+                      }));
+
+                    // Combine and deduplicate by item_name
+                    const combined = [...userMatches, ...catalogMatches];
+                    const uniqueSuggestions = Array.from(new Map(combined.map(item => [item.item_name.toLowerCase(), item])).values());
+
+                    setSuggestions(uniqueSuggestions.slice(0, 5));
+                    setShowSuggestions(true);
+                  } else {
+                    setShowSuggestions(false);
+                  }
+                }}
+                placeholder="e.g., Basmati Rice"
+                placeholderTextColor={colors.text3}
+                style={styles.input}
+                returnKeyType="done"
+                onSubmitEditing={() => {
+                  Keyboard.dismiss();
+                  setShowSuggestions(false);
+                }}
+                onFocus={() => {
+                  if (productName && suggestions.length > 0) {
+                    setShowSuggestions(true);
+                  }
+                }}
+              />
+              {showSuggestions && suggestions.length > 0 && (
+                <View style={styles.suggestionsContainer}>
+                  {suggestions.map((item, index) => (
+                    <Pressable
+                      key={index}
+                      style={[
+                        styles.suggestionItem,
+                        index < suggestions.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border }
+                      ]}
+                      onPress={() => {
+                        onProductName(item.item_name);
+                        if (item.consumption_unit) onProductUnit(item.consumption_unit);
+                        if (item.category) onProductCategory(item.category);
+                        if (item.default_freq_qty) onUsageQty(String(item.default_freq_qty));
+                        if (item.default_freq_days) onUsageDays(String(item.default_freq_days));
+                        if (item.price && onProductPrice) onProductPrice(String(item.price));
+                        setShowSuggestions(false);
+                        Keyboard.dismiss();
+                      }}
+                    >
+                      <View>
+                        <Text style={[styles.suggestionText, { color: colors.text1 }]}>{item.item_name}</Text>
+                        <Text style={[styles.suggestionCategory, { color: colors.text3 }]}>
+                          {item.category || "Other"} {item.is_user_product ? "• Previous Item" : ""}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
 
             <View style={styles.twoColumn}>
               <View style={styles.column}>
@@ -301,6 +398,37 @@ const createStyles = (colors: any) =>
     },
     placeholder: {
       color: colors.text3,
+    },
+    suggestionsContainer: {
+      position: 'absolute',
+      top: '100%',
+      left: 0,
+      right: 0,
+      marginTop: 4,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface2,
+      borderRadius: 12,
+      overflow: 'hidden',
+      zIndex: 100,
+      elevation: 5,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+    },
+    suggestionItem: {
+      padding: 12,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    suggestionText: {
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    suggestionCategory: {
+      fontSize: 12,
     },
     twoColumn: {
       flexDirection: "row",

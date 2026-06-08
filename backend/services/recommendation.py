@@ -18,7 +18,7 @@ def extract_recommendations_from_baskets(baskets, target_item_name, conn, limit=
 
     # Adjust min_support based on typical sparse grocery data
     # For personal data, we might need lower min_support because there are fewer baskets
-    itemsets, rules = apriori(baskets, min_support=0.01, min_confidence=0.1)
+    itemsets, rules = apriori(baskets, min_support=0.01, min_confidence=0.5)
 
     target_lower = target_item_name.lower()
     matched_rules = []

@@ -151,11 +151,14 @@ def handle_local_queries(question, inventory, products):
             qty_rounded = round(item.get('quantity', 0), 2)
             # Check if asking for consumption log
             if any(phrase in q_lower for phrase in ["consumption log", "consumption of", "consumption rate", "how much do i consume", "average log", "log for"]):
-                avg = item.get('avg_consumption', 0)
-                if avg > 0:
-                    return f"According to your logs, you consume an average of {round(avg, 2)} {item['unit']} of {item['name']} per logged day."
+                hist = item.get('historical_rate', 0)
+                man_qty = item.get('manual_qty', 1)
+                man_days = item.get('manual_days', 1)
+                
+                if hist > 0:
+                    return f"According to your logs, you consume an average of {round(hist, 2)} {item['unit']} of {item['name']} per logged day."
                 else:
-                    return f"I don't have enough consumption data for {item['name']} yet. Keep using the app to log it!"
+                    return f"I don't have enough logged consumption data for {item['name']} yet, but based on your manual settings, your current rate is {man_qty} {item['unit']} every {man_days} days."
             
             # Check if asking for price or general stock
             if any(phrase in q_lower for phrase in ["do i have", "i have", "is there", "stock", "quantity", "how many", "price", "how much", "show me", "tell me", "check", "in inventory", "in pantry", "my inventory"]):
@@ -170,11 +173,14 @@ def handle_local_queries(question, inventory, products):
                 
                 # Check again if it was a short query about consumption
                 if any(phrase in q_lower for phrase in ["consumption", "rate", "log"]):
-                    avg = item.get('avg_consumption', 0)
-                    if avg > 0:
-                        return f"According to your logs, you consume an average of {round(avg, 2)} {item['unit']} of {item['name']} per logged day."
+                    hist = item.get('historical_rate', 0)
+                    man_qty = item.get('manual_qty', 1)
+                    man_days = item.get('manual_days', 1)
+                    
+                    if hist > 0:
+                        return f"According to your logs, you consume an average of {round(hist, 2)} {item['unit']} of {item['name']} per logged day."
                     else:
-                        return f"I don't have enough consumption data for {item['name']} yet. Keep using the app to log it!"
+                        return f"I don't have enough logged consumption data for {item['name']} yet, but based on your manual settings, your current rate is {man_qty} {item['unit']} every {man_days} days."
                         
                 price_str = f"Rs. {item['price']}" if isinstance(item.get('price'), (int, float)) else "Unknown"
                 return f"You have {item['name']} in your inventory.\n\nCurrently in stock: {qty_rounded} {item['unit']} at {price_str}."
@@ -310,7 +316,10 @@ def fetch_relevant_products(question, user_id=None):
                     "quantity": qty,
                     "unit": row['consumption_unit'],
                     "price": row['price'] if row['price'] else "Unknown",
-                    "days_left": days_left
+                    "days_left": days_left,
+                    "manual_qty": manual_qty,
+                    "manual_days": manual_days,
+                    "historical_rate": historical_rate
                 })
         except Exception as e:
             print(f"Inventory Retrieval Error: {e}")
@@ -421,7 +430,9 @@ Rules:
 - If the recipe uses market products, clearly label them as optional items to buy.
 
 CRITICAL INSTRUCTION:
-If the user asks generally (e.g. "What can I cook?"), DO NOT give a full recipe immediately! 
+- Basic Urdu and Roman Urdu are allowed.
+- If the user's input is completely irrelevant to groceries, food, or assistant duties, or if it is just random gibberish/keyboard mashing, politely apologize, state that you can only help with grocery and pantry queries, and do not provide any recipe or product data.
+- If the user asks generally (e.g. "What can I cook?"), DO NOT give a full recipe immediately! 
 Instead, provide 2-3 short, appealing recipe TITLES based on their inventory, and ask them to pick one.
 Once the user picks an option (or if they ask for a specific recipe initially), then provide the full recipe.
 
@@ -455,6 +466,10 @@ Keep the answer short, useful, and friendly.
 Use Pakistani Rupees as Rs.
 Suggest best choices based on price and relevance.
 IMPORTANT: Distinguish between "Available Market Products" and "User's Pantry Items (Inventory)". If the user asks about their own inventory or pantry, ONLY look at "User's Pantry Items".
+
+CRITICAL RULES:
+- Basic Urdu and Roman Urdu are allowed.
+- If the user's input is completely irrelevant to groceries, food, or assistant duties, or if it is just random gibberish/keyboard mashing, politely apologize, state that you can only help with grocery and pantry queries, and do not provide any product data.
 
 User question:
 {question}

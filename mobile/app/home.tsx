@@ -40,6 +40,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { API_BASE_URL } from "@/constants/api";
 import AddProductModal from "@/components/home/AddProductModal";
+import SuggestionModal from "@/components/home/SuggestionModal";
 import BudgetCard from "@/components/home/BudgetCard";
 import ProductPreview from "@/components/home/ProductPreview";
 import { useTheme } from "@/context/theme";
@@ -155,6 +156,8 @@ export default function HomeScreen() {
   const [budget, setBudget] = useState<BudgetStatus | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showSuggestionModal, setShowSuggestionModal] = useState(false);
+  const [suggestionData, setSuggestionData] = useState<any>(null);
 
   const [productName, setProductName] = useState("");
   const [productUnit, setProductUnit] = useState("");
@@ -304,6 +307,8 @@ export default function HomeScreen() {
         return;
       }
 
+      const addedItemName = productName.trim();
+
       setProductName("");
       setProductUnit("");
       setProductQuantity("");
@@ -315,9 +320,34 @@ export default function HomeScreen() {
       setShowAddModal(false);
 
       await Promise.all([fetchProducts(), fetchBudget()]);
+
+      // fetch suggestions based on the newly added item
+      try {
+        const suggRes = await fetch(`${API_BASE_URL}/shopping/suggest?item=${encodeURIComponent(addedItemName)}&userId=${userId}`);
+        const suggData = await suggRes.json();
+        if (Array.isArray(suggData) && suggData.length > 0) {
+           setSuggestionData(suggData[0]);
+           setShowSuggestionModal(true);
+        }
+      } catch(e) {
+          // ignore error
+      }
+      
     } catch {
       Alert.alert("Add failed", "Server error. Try again.");
     }
+  };
+
+  const handleAddSuggestion = (suggestion: any) => {
+    setProductName(suggestion.item_name);
+    setProductCategory(suggestion.category || "Other");
+    setProductUnit(suggestion.consumption_unit || "pcs");
+    setProductQuantity("");
+    setUsageQty("1");
+    setUsageDays("7");
+    setProductPrice("");
+    setShelfLife("7");
+    setShowAddModal(true);
   };
 
   const handleSetBudget = async () => {
@@ -779,6 +809,7 @@ export default function HomeScreen() {
         visible={showAddModal}
         onClose={() => setShowAddModal(false)}
         onSave={handleAddProduct}
+        userProducts={products}
         productName={productName}
         onProductName={setProductName}
         productUnit={productUnit}
@@ -797,6 +828,13 @@ export default function HomeScreen() {
         onShelfLife={setShelfLife}
         unitSuggestions={unitSuggestions}
         categorySuggestions={categorySuggestions}
+      />
+
+      <SuggestionModal
+        visible={showSuggestionModal}
+        suggestion={suggestionData}
+        onClose={() => setShowSuggestionModal(false)}
+        onAdd={handleAddSuggestion}
       />
     </SafeAreaView>
   );
