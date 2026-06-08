@@ -486,8 +486,10 @@ def extract_product_section_lines(raw_text):
     lines = [normalize_text(line) for line in raw_text.split("\n")]
     lines = [line for line in lines if line.strip()]
 
+    has_header = any(is_header_line(line) for line in lines)
+
     product_lines = []
-    inside_items = False
+    inside_items = not has_header
 
     for line in lines:
         lower = line.lower()

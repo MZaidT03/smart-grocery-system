@@ -26,7 +26,8 @@ import {
   Calendar,
   Clock,
   Banknote,
-  PackageCheck
+  PackageCheck,
+  Activity
 } from "lucide-react-native";
 import { API_BASE_URL } from "@/constants/api";
 import { useTheme } from "@/context/theme";
@@ -302,6 +303,20 @@ export default function ProductScreen() {
                     {product.expiry_days === 999 ? "--" : product.expiry_days}
                   </Text>
                   <Text style={styles.statLabel}>Exp. Days</Text>
+                </View>
+
+                <View style={[styles.statBox, { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}>
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <View style={[styles.statIconWrap, { marginBottom: 0, marginRight: 12 }]}>
+                      <Activity size={18} color={colors.accent1} />
+                    </View>
+                    <Text style={[styles.statLabel, { fontSize: 14 }]}>Consumption Rate</Text>
+                  </View>
+                  <Text style={styles.statValue}>
+                    {product.usage_freq_qty && product.usage_freq_days
+                      ? `${product.usage_freq_qty} ${product.unit} / ${product.usage_freq_days}d`
+                      : "--"}
+                  </Text>
                 </View>
               </View>
             </View>
